@@ -2,6 +2,7 @@
 
 #include "WUCharacter.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/Engine.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -11,12 +12,16 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "WU.h"
+#include "Net/UnrealNetwork.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "DrawDebugHelpers.h"
 
 AWUCharacter::AWUCharacter()
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-		
+
 	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -46,6 +51,8 @@ AWUCharacter::AWUCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	bReplicates = true;
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -53,18 +60,21 @@ AWUCharacter::AWUCharacter()
 void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AWUCharacter::Move);
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
 
 		// Looking
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
+
+		// Attack
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AWUCharacter::StartAttack);
 	}
 	else
 	{
@@ -101,10 +111,10 @@ void AWUCharacter::DoMove(float Right, float Forward)
 		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 
-		// get right vector 
+		// get right vector
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// add movement 
+		// add movement
 		AddMovementInput(ForwardDirection, Forward);
 		AddMovementInput(RightDirection, Right);
 	}
@@ -130,4 +140,119 @@ void AWUCharacter::DoJumpEnd()
 {
 	// signal the character to stop jumping
 	StopJumping();
+}
+
+void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AWUCharacter, Health);
+}
+
+void AWUCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority())
+	{
+		Health = 100.0f;
+	}
+
+	FTimerHandle DebugTimerHandle;
+	GetWorldTimerManager().SetTimer(
+		DebugTimerHandle,
+		[this]()
+		{
+			if (GEngine)
+			{
+				const FString RoleText = HasAuthority() ? TEXT("Server") : TEXT("Client");
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					5.0f,
+					FColor::Green,
+					FString::Printf(TEXT("%s Health = %.1f"), *RoleText, Health)
+				);
+			}
+		},
+		1.0f,
+		false
+	);
+}
+
+void AWUCharacter::StartAttack()
+{
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			2.0f,
+			FColor::Yellow,
+			TEXT("Attack button pressed")
+		);
+	}
+
+	ServerAttack();
+}
+
+void AWUCharacter::ServerAttack_Implementation()
+{
+	PerformAttackTrace();
+}
+
+void AWUCharacter::PerformAttackTrace()
+{
+	const FVector Start = GetActorLocation();
+	const FVector End = Start + (GetActorForwardVector() * 200.0f);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(
+		Hit,
+		Start,
+		End,
+		ECC_Pawn,
+		Params
+	);
+
+	DrawDebugLine(
+		GetWorld(),
+		Start,
+		End,
+		bHit ? FColor::Red : FColor::Green,
+		false,
+		1.5f,
+		0,
+		2.0f
+	);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			2.0f,
+			bHit ? FColor::Red : FColor::Green,
+			bHit ? TEXT("Attack trace hit something") : TEXT("Attack trace missed")
+		);
+	}
+}
+
+void AWUCharacter::ApplyDamage(float Amount)
+{
+	if (HasAuthority())
+	{
+		Health -= Amount;
+		Health = FMath::Max(Health, 0.0f);
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				2.0f,
+				FColor::Red,
+				FString::Printf(TEXT("%s Health = %.1f"), *GetName(), Health)
+			);
+		}
+	}
 }

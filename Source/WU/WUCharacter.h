@@ -19,7 +19,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
  *  Implements a controllable orbiting camera
  */
 UCLASS(abstract)
-class AWUCharacter : public ACharacter
+class WU_API AWUCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
@@ -49,12 +49,32 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* MouseLookAction;
 
+	/** Attack Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* AttackAction;
+
 public:
 
 	/** Constructor */
-	AWUCharacter();	
+	AWUCharacter();
+
+	UPROPERTY(Replicated)
+	float Health;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void StartAttack();
+
+	UFUNCTION(Server, Reliable)
+	void ServerAttack();
+
+	void PerformAttackTrace();
+
+	void ApplyDamage(float Amount);
 
 protected:
+	virtual void BeginPlay() override;
 
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
