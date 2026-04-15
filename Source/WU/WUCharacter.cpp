@@ -216,6 +216,7 @@ void AWUCharacter::PerformAttackTrace()
 		Params
 	);
 
+	// Debug line
 	DrawDebugLine(
 		GetWorld(),
 		Start,
@@ -227,31 +228,87 @@ void AWUCharacter::PerformAttackTrace()
 		2.0f
 	);
 
-	if (GEngine)
+	if (bHit)
 	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			2.0f,
-			bHit ? FColor::Red : FColor::Green,
-			bHit ? TEXT("Attack trace hit something") : TEXT("Attack trace missed")
-		);
+		// Try to cast hit actor to our character class
+		AWUCharacter* HitCharacter = Cast<AWUCharacter>(Hit.GetActor());
+
+		if (HitCharacter && HitCharacter != this)
+		{
+			// Apply damage on server
+			HitCharacter->ApplyDamage(10.0f);
+
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					2.0f,
+					FColor::Red,
+					TEXT("Hit player and applied damage")
+				);
+			}
+		}
+		else
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					2.0f,
+					FColor::Yellow,
+					TEXT("Hit something, but not a player")
+				);
+			}
+		}
 	}
-}
-
-void AWUCharacter::ApplyDamage(float Amount)
-{
-	if (HasAuthority())
+	else
 	{
-		Health -= Amount;
-		Health = FMath::Max(Health, 0.0f);
-
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(
 				-1,
 				2.0f,
-				FColor::Red,
-				FString::Printf(TEXT("%s Health = %.1f"), *GetName(), Health)
+				FColor::Green,
+				TEXT("Attack missed")
+			);
+		}
+	}
+}
+
+void AWUCharacter::ApplyDamage(float Amount)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (Health <= 0.0f)
+	{
+		return;
+	}
+
+	Health -= Amount;
+	Health = FMath::Max(Health, 0.0f);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			2.0f,
+			FColor::Red,
+			FString::Printf(TEXT("%s Health = %.1f"), *GetName(), Health)
+		);
+	}
+
+	if (Health <= 0.0f)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				2.0f,
+				FColor::Purple,
+				FString::Printf(TEXT("%s died"), *GetName())
 			);
 		}
 	}
