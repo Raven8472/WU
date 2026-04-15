@@ -84,9 +84,12 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
-
+		//attack
 		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AWUCharacter::StartAttack);
+		//release
+		EnhancedInputComponent->BindAction(ReleaseAction, ETriggerEvent::Started, this, &AWUCharacter::RequestRelease);
 	}
+
 	else
 	{
 		UE_LOG(LogWU, Error, TEXT("'%s' Failed to find an Enhanced Input component!"), *GetNameSafe(this));
@@ -280,4 +283,24 @@ void AWUCharacter::ReleaseToGraveyard()
 			TEXT("Released to Graveyard")
 		);
 	}
+}
+
+void AWUCharacter::RequestRelease()
+{
+	if (!bIsDead || bHasReleased)
+	{
+		return;
+	}
+
+	ServerRequestRelease();
+}
+
+void AWUCharacter::ServerRequestRelease_Implementation()
+{
+	if (!bIsDead || bHasReleased)
+	{
+		return;
+	}
+
+	ReleaseToGraveyard();
 }

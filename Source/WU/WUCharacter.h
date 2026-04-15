@@ -53,6 +53,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* AttackAction;
 
+	/** Release Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* ReleaseAction;
+
 	/** Timer handle used for auto-release after death */
 	FTimerHandle ReleaseTimerHandle;
 
@@ -99,6 +103,13 @@ public:
 
 	/** Releases the player to a graveyard location */
 	void ReleaseToGraveyard();
+
+	/** Player manually requests release (client-side input) */
+	void RequestRelease();
+
+	/** Server handles release request */
+	UFUNCTION(Server, Reliable)
+	void ServerRequestRelease();
 
 protected:
 
