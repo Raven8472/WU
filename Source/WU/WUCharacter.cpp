@@ -251,15 +251,15 @@ void AWUCharacter::PerformAttackTrace()
 		if (HitCharacter && HitCharacter != this)
 		{
 			// Apply damage on server
-			HitCharacter->ApplyDamage(10.0f);
+			const bool bDamageApplied = HitCharacter->ApplyDamage(10.0f);
 
 			if (GEngine)
 			{
 				GEngine->AddOnScreenDebugMessage(
 					-1,
 					2.0f,
-					FColor::Red,
-					TEXT("Hit player and applied damage")
+					bDamageApplied ? FColor::Red : FColor::Yellow,
+					bDamageApplied ? TEXT("Hit player and applied damage") : TEXT("Hit dead player - no damage applied")
 				);
 			}
 		}
@@ -290,16 +290,16 @@ void AWUCharacter::PerformAttackTrace()
 	}
 }
 
-void AWUCharacter::ApplyDamage(float Amount)
+bool AWUCharacter::ApplyDamage(float Amount)
 {
 	if (!HasAuthority())
 	{
-		return;
+		return false;
 	}
 
 	if (bIsDead || Health <= 0.0f)
 	{
-		return;
+		return false;
 	}
 
 	Health -= Amount;
@@ -330,4 +330,6 @@ void AWUCharacter::ApplyDamage(float Amount)
 			);
 		}
 	}
+
+	return true;
 }

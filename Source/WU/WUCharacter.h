@@ -78,7 +78,7 @@ public:
 
 	void PerformAttackTrace();
 
-	void ApplyDamage(float Amount);
+	bool ApplyDamage(float Amount);
 
 protected:
 	virtual void BeginPlay() override;
