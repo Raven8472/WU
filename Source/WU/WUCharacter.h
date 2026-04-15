@@ -53,14 +53,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* AttackAction;
 
+
 public:
 
 	/** Constructor */
 	AWUCharacter();
 
+	/** Current health of the character (replicated from server) */
 	UPROPERTY(Replicated)
 	float Health;
 
+	/** Whether the character is dead (replicated from server) */
+	UPROPERTY(Replicated)
+	bool bIsDead;
+
+	/** Sets up which variables replicate */
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintCallable, Category = "Combat")

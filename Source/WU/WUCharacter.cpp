@@ -53,6 +53,10 @@ AWUCharacter::AWUCharacter()
 
 	bReplicates = true;
 
+	// Initialize gameplay state
+	Health = 100.0f;
+	bIsDead = false;
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -147,6 +151,7 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AWUCharacter, Health);
+	DOREPLIFETIME(AWUCharacter, bIsDead);
 }
 
 void AWUCharacter::BeginPlay()
@@ -181,6 +186,11 @@ void AWUCharacter::BeginPlay()
 
 void AWUCharacter::StartAttack()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(
@@ -196,6 +206,11 @@ void AWUCharacter::StartAttack()
 
 void AWUCharacter::ServerAttack_Implementation()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	PerformAttackTrace();
 }
 
@@ -282,7 +297,7 @@ void AWUCharacter::ApplyDamage(float Amount)
 		return;
 	}
 
-	if (Health <= 0.0f)
+	if (bIsDead || Health <= 0.0f)
 	{
 		return;
 	}
@@ -302,6 +317,9 @@ void AWUCharacter::ApplyDamage(float Amount)
 
 	if (Health <= 0.0f)
 	{
+		bIsDead = true;
+		GetCharacterMovement()->DisableMovement();
+
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(
