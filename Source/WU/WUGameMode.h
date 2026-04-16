@@ -9,16 +9,14 @@
 /**
  *  Simple GameMode for a third person game
  */
-UCLASS(abstract)
-class AWUGameMode : public AGameModeBase
+UCLASS()
+class WU_API AWUGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 
 public:
-	
+
 	/** Constructor */
 	AWUGameMode();
 };
-
-
 
