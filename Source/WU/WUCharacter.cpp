@@ -17,6 +17,7 @@
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
 #include "Blueprint/UserWidget.h"
+#include "Kismet/GameplayStatics.h"
 
 AWUCharacter::AWUCharacter()
 {
@@ -283,7 +284,19 @@ void AWUCharacter::ReleaseToGraveyard()
 
 	bHasReleased = true;
 
-	const FVector GraveyardLocation = FVector(0.0f, 0.0f, 300.0f);
+	FVector GraveyardLocation = GetActorLocation(); // fallback
+
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), FoundActors);
+
+	for (AActor* Actor : FoundActors)
+	{
+		if (Actor && Actor->GetName().Contains(TEXT("BP_Graveyard")))
+		{
+			GraveyardLocation = Actor->GetActorLocation();
+			break;
+		}
+	}
 
 	SetActorLocation(GraveyardLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	ForceNetUpdate();
