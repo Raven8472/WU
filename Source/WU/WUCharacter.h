@@ -121,6 +121,9 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRelease();
 
+	/** Revives the player at their death location (corpse) */
+	void ReviveAtCorpse();
+
 protected:
 
 	virtual void BeginPlay() override;

@@ -284,6 +284,9 @@ void AWUCharacter::ReleaseToGraveyard()
 
 	bHasReleased = true;
 
+	// Released players can move again to run back to their corpse
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+
 	FVector GraveyardLocation = GetActorLocation(); // fallback
 
 	TArray<AActor*> FoundActors;
@@ -320,20 +323,72 @@ void AWUCharacter::ReleaseToGraveyard()
 
 void AWUCharacter::RequestRelease()
 {
-	if (!bIsDead || bHasReleased)
+	if (!bIsDead)
 	{
 		return;
 	}
 
-	ServerRequestRelease();
+	// If dead but not yet released, go to graveyard
+	if (!bHasReleased)
+	{
+		ServerRequestRelease();
+		return;
+	}
+
+	// If already released, allow revive when close enough to corpse
+	const float DistanceToCorpse = FVector::Dist(GetActorLocation(), DeathLocation);
+
+	if (DistanceToCorpse <= 200.0f)
+	{
+		ServerRequestRelease();
+	}
 }
 
 void AWUCharacter::ServerRequestRelease_Implementation()
 {
-	if (!bIsDead || bHasReleased)
+	if (!bIsDead)
 	{
 		return;
 	}
 
-	ReleaseToGraveyard();
+	// First press while dead: release to graveyard
+	if (!bHasReleased)
+	{
+		ReleaseToGraveyard();
+		return;
+	}
+
+	// Already released: revive if close enough to corpse
+	const float DistanceToCorpse = FVector::Dist(GetActorLocation(), DeathLocation);
+
+	if (DistanceToCorpse <= 200.0f)
+	{
+		ReviveAtCorpse();
+	}
+}
+
+void AWUCharacter::ReviveAtCorpse()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	Health = 100.0f;
+	bIsDead = false;
+	bHasReleased = false;
+
+	SetActorLocation(DeathLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	ForceNetUpdate();
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			3.0f,
+			FColor::Green,
+			TEXT("Revived at corpse")
+		);
+	}
 }
