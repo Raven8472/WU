@@ -288,6 +288,7 @@ bool AWUCharacter::ApplyDamage(float Amount)
 			if (DeathWidget)
 			{
 				DeathWidget->AddToViewport();
+				Client_SetInputMode(true);
 			}
 		}
 
@@ -341,6 +342,7 @@ void AWUCharacter::ReleaseToGraveyard()
 	{
 		DeathWidget->RemoveFromParent();
 		DeathWidget = nullptr;
+		Client_SetInputMode(false);
 	}
 
 	if (GEngine)
@@ -429,5 +431,29 @@ void AWUCharacter::ReviveAtCorpse()
 			FColor::Green,
 			TEXT("Revived at corpse")
 		);
+	}
+}
+
+void AWUCharacter::Client_SetInputMode_Implementation(bool bShowCursor)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	PC->bShowMouseCursor = bShowCursor;
+
+	if (bShowCursor)
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PC->SetInputMode(InputMode);
+	}
+	else
+	{
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
 	}
 }

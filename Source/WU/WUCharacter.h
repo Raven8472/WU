@@ -134,6 +134,10 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRelease();
 
+	/** Client switches between gameplay input and UI input */
+	UFUNCTION(Client, Reliable)
+	void Client_SetInputMode(bool bShowCursor);
+
 	/** Revives the player at their death location (corpse) */
 	void ReviveAtCorpse();
 
