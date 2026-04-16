@@ -52,6 +52,7 @@ AWUCharacter::AWUCharacter()
 	bIsDead = false;
 	bHasReleased = false;
 	DeathWidget = nullptr;
+	CorpseMarker = nullptr;
 }
 
 void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -238,6 +239,23 @@ bool AWUCharacter::ApplyDamage(float Amount)
 		bHasReleased = false;
 		DeathLocation = GetActorLocation();
 
+		// Spawn corpse marker
+		if (!CorpseMarker)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.Owner = this;
+
+			if (CorpseMarkerClass)
+			{
+				CorpseMarker = GetWorld()->SpawnActor<AActor>(
+					CorpseMarkerClass,
+					DeathLocation,
+					FRotator::ZeroRotator,
+					SpawnParams
+				);
+			}
+		}
+
 		GetCharacterMovement()->DisableMovement();
 
 		GetWorldTimerManager().SetTimer(
@@ -381,6 +399,12 @@ void AWUCharacter::ReviveAtCorpse()
 	SetActorLocation(DeathLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	ForceNetUpdate();
+
+	if (CorpseMarker)
+	{
+		CorpseMarker->Destroy();
+		CorpseMarker = nullptr;
+	}
 
 	if (GEngine)
 	{

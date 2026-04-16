@@ -69,6 +69,14 @@ protected:
 	UPROPERTY()
 	UUserWidget* DeathWidget;
 
+	/** Reference to the spawned corpse marker actor */
+	UPROPERTY()
+	AActor* CorpseMarker;
+
+	/** Corpse marker Blueprint class */
+	UPROPERTY(EditAnywhere, Category = "Death")
+	TSubclassOf<AActor> CorpseMarkerClass;
+
 public:
 
 	/** Constructor */
