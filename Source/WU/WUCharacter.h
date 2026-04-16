@@ -10,6 +10,7 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UUserWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -60,6 +61,14 @@ protected:
 	/** Timer handle used for auto-release after death */
 	FTimerHandle ReleaseTimerHandle;
 
+	/** Widget class used for the death screen */
+	UPROPERTY(EditAnywhere, Category = "UI")
+	TSubclassOf<UUserWidget> DeathWidgetClass;
+
+	/** Runtime instance of the death screen widget */
+	UPROPERTY()
+	UUserWidget* DeathWidget;
+
 public:
 
 	/** Constructor */
@@ -105,6 +114,7 @@ public:
 	void ReleaseToGraveyard();
 
 	/** Player manually requests release (client-side input) */
+	UFUNCTION(BlueprintCallable, Category = "Death")
 	void RequestRelease();
 
 	/** Server handles release request */

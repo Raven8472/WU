@@ -16,6 +16,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
+#include "Blueprint/UserWidget.h"
 
 AWUCharacter::AWUCharacter()
 {
@@ -49,6 +50,7 @@ AWUCharacter::AWUCharacter()
 	Health = 100.0f;
 	bIsDead = false;
 	bHasReleased = false;
+	DeathWidget = nullptr;
 }
 
 void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -71,6 +73,8 @@ void AWUCharacter::BeginPlay()
 		bIsDead = false;
 		bHasReleased = false;
 	}
+
+	DeathWidget = nullptr;
 }
 
 void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -243,6 +247,16 @@ bool AWUCharacter::ApplyDamage(float Amount)
 			false
 		);
 
+		if (IsLocallyControlled() && DeathWidgetClass && !DeathWidget)
+		{
+			DeathWidget = CreateWidget<UUserWidget>(GetWorld(), DeathWidgetClass);
+
+			if (DeathWidget)
+			{
+				DeathWidget->AddToViewport();
+			}
+		}
+
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Purple, TEXT("Player died - 15s to release"));
@@ -273,6 +287,12 @@ void AWUCharacter::ReleaseToGraveyard()
 
 	SetActorLocation(GraveyardLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	ForceNetUpdate();
+
+	if (DeathWidget)
+	{
+		DeathWidget->RemoveFromParent();
+		DeathWidget = nullptr;
+	}
 
 	if (GEngine)
 	{
