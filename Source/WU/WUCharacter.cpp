@@ -8,6 +8,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
@@ -83,6 +84,21 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 {
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+		{
+			if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+			{
+				if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+					LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+				{
+					if (DefaultMappingContext)
+					{
+						Subsystem->AddMappingContext(DefaultMappingContext, 0);
+					}
+				}
+			}
+		}
+
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
@@ -95,7 +111,6 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		//release
 		EnhancedInputComponent->BindAction(ReleaseAction, ETriggerEvent::Started, this, &AWUCharacter::RequestRelease);
 	}
-
 	else
 	{
 		UE_LOG(LogWU, Error, TEXT("'%s' Failed to find an Enhanced Input component!"), *GetNameSafe(this));

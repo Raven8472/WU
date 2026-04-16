@@ -18,5 +18,11 @@ public:
 
 	/** Constructor */
 	AWUGameMode();
+
+	/** Character Blueprint class to spawn for players */
+	UPROPERTY(EditAnywhere, Category = "Spawning")
+	TSubclassOf<APawn> PlayerPawnClass;
+
+	virtual void PostLogin(APlayerController* NewPlayer) override;
 };
 

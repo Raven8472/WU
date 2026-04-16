@@ -10,6 +10,7 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UInputMappingContext;
 class UUserWidget;
 struct FInputActionValue;
 
@@ -68,6 +69,10 @@ protected:
 	/** Runtime instance of the death screen widget */
 	UPROPERTY()
 	UUserWidget* DeathWidget;
+
+	/** Default mapping context used for player input */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	UInputMappingContext* DefaultMappingContext;
 
 	/** Reference to the spawned corpse marker actor */
 	UPROPERTY()
