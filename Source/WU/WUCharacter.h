@@ -92,7 +92,7 @@ public:
 	float Health;
 
 	/** Whether the character is dead (replicated from server) */
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_DeathState)
 	bool bIsDead;
 
 	/** Location where the character died (replicated from server) */
@@ -100,7 +100,7 @@ public:
 	FVector DeathLocation;
 
 	/** Whether the character has released to graveyard (replicated from server) */
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_DeathState)
 	bool bHasReleased;
 
 	/** Sets up which variables replicate */
@@ -140,6 +140,13 @@ public:
 
 	/** Revives the player at their death location (corpse) */
 	void ReviveAtCorpse();
+
+	/** Called when replicated death/release state changes on clients */
+	UFUNCTION()
+	void OnRep_DeathState();
+
+	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
+	void UpdateDeathStateEffects();
 
 protected:
 

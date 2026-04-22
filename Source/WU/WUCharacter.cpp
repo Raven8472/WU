@@ -5,6 +5,7 @@
 #include "Engine/Engine.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
@@ -78,6 +79,11 @@ void AWUCharacter::BeginPlay()
 	}
 
 	DeathWidget = nullptr;
+}
+
+void AWUCharacter::OnRep_DeathState()
+{
+	UpdateDeathStateEffects();
 }
 
 void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -161,6 +167,51 @@ void AWUCharacter::DoJumpStart()
 void AWUCharacter::DoJumpEnd()
 {
 	StopJumping();
+}
+
+void AWUCharacter::UpdateDeathStateEffects()
+{
+	// Dead and waiting to release
+	if (bIsDead && !bHasReleased)
+	{
+		GetCharacterMovement()->DisableMovement();
+
+		if (GetMesh())
+		{
+			GetMesh()->SetRenderCustomDepth(false);
+		}
+
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		return;
+	}
+
+	// Dead but released: spirit form
+	if (bIsDead && bHasReleased)
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		GetCharacterMovement()->MaxWalkSpeed = 700.0f;
+
+		// Let spirit players pass through other players
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+		// Temporary visual hook for spirit form
+		if (GetMesh())
+		{
+			GetMesh()->SetRenderCustomDepth(true);
+		}
+
+		return;
+	}
+
+	// Alive
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	GetCharacterMovement()->MaxWalkSpeed = 500.0f;
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+	if (GetMesh())
+	{
+		GetMesh()->SetRenderCustomDepth(false);
+	}
 }
 
 void AWUCharacter::StartAttack()
@@ -253,6 +304,7 @@ bool AWUCharacter::ApplyDamage(float Amount)
 		bIsDead = true;
 		bHasReleased = false;
 		DeathLocation = GetActorLocation();
+		UpdateDeathStateEffects();
 
 		// Spawn corpse marker
 		if (!CorpseMarker)
@@ -317,6 +369,7 @@ void AWUCharacter::ReleaseToGraveyard()
 	}
 
 	bHasReleased = true;
+	UpdateDeathStateEffects();
 
 	// Released players can move again to run back to their corpse
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
@@ -412,6 +465,7 @@ void AWUCharacter::ReviveAtCorpse()
 	Health = 100.0f;
 	bIsDead = false;
 	bHasReleased = false;
+	UpdateDeathStateEffects();
 
 	SetActorLocation(DeathLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
