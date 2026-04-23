@@ -79,6 +79,10 @@ void AWUCharacter::BeginPlay()
 	}
 
 	DeathWidget = nullptr;
+
+	// Apply the initial alive/dead collision and movement state on spawn so
+	// freshly spawned players match the same rules used after later state changes.
+	UpdateDeathStateEffects();
 }
 
 void AWUCharacter::OnRep_DeathState()
@@ -245,14 +249,17 @@ void AWUCharacter::PerformAttackTrace()
 	const FVector End = Start + (GetActorForwardVector() * 200.0f);
 
 	FHitResult Hit;
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
 
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(
+	const bool bHit = GetWorld()->LineTraceSingleByObjectType(
 		Hit,
 		Start,
 		End,
-		ECC_Pawn,
+		ObjectParams,
 		Params
 	);
 
