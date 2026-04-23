@@ -25,19 +25,12 @@ public class WU : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"WU",
-			"WU/Variant_Platforming",
-			"WU/Variant_Platforming/Animation",
 			"WU/Variant_Combat",
 			"WU/Variant_Combat/AI",
 			"WU/Variant_Combat/Animation",
 			"WU/Variant_Combat/Gameplay",
 			"WU/Variant_Combat/Interfaces",
-			"WU/Variant_Combat/UI",
-			"WU/Variant_SideScrolling",
-			"WU/Variant_SideScrolling/AI",
-			"WU/Variant_SideScrolling/Gameplay",
-			"WU/Variant_SideScrolling/Interfaces",
-			"WU/Variant_SideScrolling/UI"
+			"WU/Variant_Combat/UI"
 		});
 
 		// Uncomment if you are using Slate UI
