@@ -87,6 +87,10 @@ public:
 	/** Constructor */
 	AWUCharacter();
 
+	/** Base attack damage (will later be modified by stats/gear) */
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	float BaseAttackDamage = 10.0f;
+
 	/** Current health of the character (replicated from server) */
 	UPROPERTY(Replicated)
 	float Health;
@@ -119,6 +123,9 @@ public:
 
 	/** Applies damage on the server, returns true if damage was actually applied */
 	bool ApplyDamage(float Amount);
+
+	/** Calculates outgoing damage (placeholder for future stat system) */
+	float CalculateDamage() const;
 
 	/** Handles auto-release when the death timer expires */
 	void HandleAutoRelease();

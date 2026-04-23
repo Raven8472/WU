@@ -169,6 +169,11 @@ void AWUCharacter::DoJumpEnd()
 	StopJumping();
 }
 
+float AWUCharacter::CalculateDamage() const
+{
+	return BaseAttackDamage;
+}
+
 void AWUCharacter::UpdateDeathStateEffects()
 {
 	// Dead and waiting to release
@@ -259,15 +264,19 @@ void AWUCharacter::PerformAttackTrace()
 
 		if (HitCharacter && HitCharacter != this)
 		{
-			const bool bDamageApplied = HitCharacter->ApplyDamage(10.0f);
+			const bool bDamageApplied = HitCharacter->ApplyDamage(CalculateDamage());
 
 			if (GEngine)
 			{
+				const FString DebugMessage = bDamageApplied
+					? FString::Printf(TEXT("Hit player and applied %.1f damage"), CalculateDamage())
+					: TEXT("Hit dead player - no damage");
+
 				GEngine->AddOnScreenDebugMessage(
 					-1,
 					2.0f,
 					bDamageApplied ? FColor::Red : FColor::Yellow,
-					bDamageApplied ? TEXT("Hit player and applied damage") : TEXT("Hit dead player - no damage")
+					DebugMessage
 				);
 			}
 		}
