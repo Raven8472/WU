@@ -1,0 +1,362 @@
+[
+  {
+    "file": "T_HUD_Panel_Large_9Slice.png",
+    "size": [
+      512,
+      256
+    ],
+    "use": "Resizable dark fantasy panel/backplate",
+    "umg_draw_as": "Box",
+    "margin": "32px all sides",
+    "umg_margin": "Left/Right 0.0625, Top/Bottom 0.1250",
+    "notes": "Transparent corners; set texture group to UI and compression to UserInterface2D."
+  },
+  {
+    "file": "T_HUD_Panel_Compact_9Slice.png",
+    "size": [
+      320,
+      160
+    ],
+    "use": "Resizable dark fantasy panel/backplate",
+    "umg_draw_as": "Box",
+    "margin": "24px all sides",
+    "umg_margin": "Left/Right 0.0750, Top/Bottom 0.1500",
+    "notes": "Transparent corners; set texture group to UI and compression to UserInterface2D."
+  },
+  {
+    "file": "T_HUD_ChatPanel_9Slice.png",
+    "size": [
+      512,
+      256
+    ],
+    "use": "Resizable dark fantasy panel/backplate",
+    "umg_draw_as": "Box",
+    "margin": "28px all sides",
+    "umg_margin": "Left/Right 0.0547, Top/Bottom 0.1094",
+    "notes": "Transparent corners; set texture group to UI and compression to UserInterface2D."
+  },
+  {
+    "file": "T_HUD_Tooltip_9Slice.png",
+    "size": [
+      360,
+      180
+    ],
+    "use": "Resizable dark fantasy panel/backplate",
+    "umg_draw_as": "Box",
+    "margin": "24px all sides",
+    "umg_margin": "Left/Right 0.0667, Top/Bottom 0.1333",
+    "notes": "Transparent corners; set texture group to UI and compression to UserInterface2D."
+  },
+  {
+    "file": "T_HUD_ActionSlot_Normal.png",
+    "size": [
+      96,
+      96
+    ],
+    "use": "Action slot normal state",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Use as an Overlay frame above ability/item icon."
+  },
+  {
+    "file": "T_HUD_ActionSlot_Hover.png",
+    "size": [
+      96,
+      96
+    ],
+    "use": "Action slot hover state",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Use as an Overlay frame above ability/item icon."
+  },
+  {
+    "file": "T_HUD_ActionSlot_Pressed.png",
+    "size": [
+      96,
+      96
+    ],
+    "use": "Action slot pressed state",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Use as an Overlay frame above ability/item icon."
+  },
+  {
+    "file": "T_HUD_ActionSlot_Disabled.png",
+    "size": [
+      96,
+      96
+    ],
+    "use": "Action slot disabled state",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Use as an Overlay frame above ability/item icon."
+  },
+  {
+    "file": "T_HUD_ActionSlot_CooldownOverlay.png",
+    "size": [
+      96,
+      96
+    ],
+    "use": "Static cooldown/dim overlay",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "For a true radial cooldown, use this as a material reference or mask source."
+  },
+  {
+    "file": "T_HUD_BarFrame_Player.png",
+    "size": [
+      392,
+      70
+    ],
+    "use": "Fixed health/resource bar frame",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Place progress fill beneath this frame, inset about 18px left/right and 17px top/bottom."
+  },
+  {
+    "file": "T_HUD_BarFrame_Target.png",
+    "size": [
+      360,
+      58
+    ],
+    "use": "Fixed health/resource bar frame",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Place progress fill beneath this frame, inset about 18px left/right and 17px top/bottom."
+  },
+  {
+    "file": "T_HUD_Bar_Fill_Health.png",
+    "size": [
+      512,
+      32
+    ],
+    "use": "Progress bar fill texture",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Tile horizontally or use as fill image in a Progress Bar style."
+  },
+  {
+    "file": "T_HUD_Bar_Fill_Stamina.png",
+    "size": [
+      512,
+      32
+    ],
+    "use": "Progress bar fill texture",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Tile horizontally or use as fill image in a Progress Bar style."
+  },
+  {
+    "file": "T_HUD_Bar_Fill_Mana.png",
+    "size": [
+      512,
+      32
+    ],
+    "use": "Progress bar fill texture",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Tile horizontally or use as fill image in a Progress Bar style."
+  },
+  {
+    "file": "T_HUD_Bar_Fill_XP.png",
+    "size": [
+      512,
+      18
+    ],
+    "use": "Progress bar fill texture",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Tile horizontally or use as fill image in a Progress Bar style."
+  },
+  {
+    "file": "T_HUD_PortraitFrame_Player.png",
+    "size": [
+      160,
+      160
+    ],
+    "use": "Circular player/target portrait frame",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Place portrait image under the frame using a circular material mask."
+  },
+  {
+    "file": "T_HUD_PortraitFrame_Target.png",
+    "size": [
+      144,
+      144
+    ],
+    "use": "Circular player/target portrait frame",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Place portrait image under the frame using a circular material mask."
+  },
+  {
+    "file": "T_HUD_MinimapFrame_Rect_9Slice.png",
+    "size": [
+      360,
+      244
+    ],
+    "use": "Resizable minimap frame",
+    "umg_draw_as": "Box",
+    "margin": "24px all sides",
+    "umg_margin": "Left/Right 0.0667, Top/Bottom 0.0984",
+    "notes": "Header band expects map name/time as separate UMG text."
+  },
+  {
+    "file": "T_HUD_MinimapMask_RoundedSquare.png",
+    "size": [
+      256,
+      256
+    ],
+    "use": "Minimap material alpha mask",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Use as mask input if your minimap render target needs clipped corners."
+  },
+  {
+    "file": "T_HUD_SideSlotColumn_Frame_9Slice.png",
+    "size": [
+      96,
+      512
+    ],
+    "use": "Resizable side hotbar/inventory column backplate",
+    "umg_draw_as": "Box",
+    "margin": "24px all sides",
+    "umg_margin": "Left/Right 0.2500, Top/Bottom 0.0469",
+    "notes": ""
+  },
+  {
+    "file": "T_HUD_Tab_Normal_9Slice.png",
+    "size": [
+      160,
+      48
+    ],
+    "use": "Chat/log tab state",
+    "umg_draw_as": "Box",
+    "margin": "18px left/right, 12px top/bottom",
+    "umg_margin": "Left/Right 0.1125, Top/Bottom 0.2500",
+    "notes": ""
+  },
+  {
+    "file": "T_HUD_Tab_Active_9Slice.png",
+    "size": [
+      160,
+      48
+    ],
+    "use": "Chat/log tab state",
+    "umg_draw_as": "Box",
+    "margin": "18px left/right, 12px top/bottom",
+    "umg_margin": "Left/Right 0.1125, Top/Bottom 0.2500",
+    "notes": ""
+  },
+  {
+    "file": "T_HUD_Separator_Horizontal.png",
+    "size": [
+      512,
+      12
+    ],
+    "use": "Thin divider/separator",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": ""
+  },
+  {
+    "file": "T_HUD_Separator_Vertical.png",
+    "size": [
+      12,
+      512
+    ],
+    "use": "Thin divider/separator",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": ""
+  },
+  {
+    "file": "T_HUD_QuestMarker_Diamond.png",
+    "size": [
+      48,
+      48
+    ],
+    "use": "Quest bullet/marker",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": ""
+  },
+  {
+    "file": "T_HUD_BottomBar_Filigree.png",
+    "size": [
+      960,
+      180
+    ],
+    "use": "Decorative bottom action-bar flourish",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Optional decoration behind the center hotbar; keep separate from interactive slots."
+  },
+  {
+    "file": "T_HUD_Ornament_WingedBoar_Left.png",
+    "size": [
+      120,
+      120
+    ],
+    "use": "Winged boar HUD ornament",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Fixed-size ornament. Use Size To Content or keep width and height equal when scaling."
+  },
+  {
+    "file": "T_HUD_Ornament_WingedBoar_Right.png",
+    "size": [
+      120,
+      120
+    ],
+    "use": "Winged boar HUD ornament",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Fixed-size ornament. Use Size To Content or keep width and height equal when scaling."
+  },
+  {
+    "file": "T_HUD_BottomBar_Rail.png",
+    "size": [
+      1040,
+      40
+    ],
+    "use": "Rail-only bottom action-bar ornament",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Use separately from the winged boars. Anchor bottom center behind the hotbar and scale X only if needed."
+  },
+  {
+    "file": "T_HUD_BottomBar_WingedBoars.png",
+    "size": [
+      1280,
+      120
+    ],
+    "use": "Decorative bottom action-bar flourish with winged boar ornaments",
+    "umg_draw_as": "Image",
+    "margin": "",
+    "umg_margin": "",
+    "notes": "Anchor bottom center behind the hotbar. Scale uniformly; do not stretch X/Y independently."
+  }
+]
