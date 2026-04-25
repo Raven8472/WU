@@ -32,9 +32,17 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input|Touch Controls")
 	TSubclassOf<UUserWidget> MobileControlsWidgetClass;
 
+	/** Main gameplay HUD widget to spawn for the local player */
+	UPROPERTY(EditAnywhere, Category="UI|HUD")
+	TSubclassOf<UUserWidget> PlayerHUDWidgetClass;
+
 	/** Pointer to the mobile controls widget */
 	UPROPERTY()
 	TObjectPtr<UUserWidget> MobileControlsWidget;
+
+	/** Pointer to the main gameplay HUD widget */
+	UPROPERTY()
+	TObjectPtr<UUserWidget> PlayerHUDWidget;
 
 	/** If true, the player will use UMG touch controls even if not playing on mobile platforms */
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")

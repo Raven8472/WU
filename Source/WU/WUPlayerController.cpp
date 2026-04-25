@@ -13,6 +13,16 @@ void AWUPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (IsLocalPlayerController() && PlayerHUDWidgetClass)
+	{
+		PlayerHUDWidget = CreateWidget<UUserWidget>(this, PlayerHUDWidgetClass);
+
+		if (PlayerHUDWidget)
+		{
+			PlayerHUDWidget->AddToPlayerScreen(5);
+		}
+	}
+
 	// only spawn touch controls on local player controllers
 	if (ShouldUseTouchControls() && IsLocalPlayerController())
 	{

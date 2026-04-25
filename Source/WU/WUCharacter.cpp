@@ -50,7 +50,7 @@ AWUCharacter::AWUCharacter()
 
 	bReplicates = true;
 
-	Health = 100.0f;
+	Health = MaxHealth;
 	bIsDead = false;
 	bHasReleased = false;
 	DeathWidget = nullptr;
@@ -73,7 +73,7 @@ void AWUCharacter::BeginPlay()
 
 	if (HasAuthority())
 	{
-		Health = 100.0f;
+		Health = MaxHealth;
 		bIsDead = false;
 		bHasReleased = false;
 	}
@@ -176,6 +176,46 @@ void AWUCharacter::DoJumpEnd()
 float AWUCharacter::CalculateDamage() const
 {
 	return BaseAttackDamage;
+}
+
+float AWUCharacter::GetHealthPercent() const
+{
+	return MaxHealth > 0.0f ? FMath::Clamp(Health / MaxHealth, 0.0f, 1.0f) : 0.0f;
+}
+
+float AWUCharacter::GetCurrentHealth() const
+{
+	return Health;
+}
+
+float AWUCharacter::GetMaxHealth() const
+{
+	return MaxHealth;
+}
+
+bool AWUCharacter::IsDead() const
+{
+	return bIsDead;
+}
+
+bool AWUCharacter::HasReleased() const
+{
+	return bHasReleased;
+}
+
+bool AWUCharacter::IsReleasedSpirit() const
+{
+	return bIsDead && bHasReleased;
+}
+
+bool AWUCharacter::CanReviveAtCorpse() const
+{
+	if (!IsReleasedSpirit())
+	{
+		return false;
+	}
+
+	return FVector::Dist(GetActorLocation(), DeathLocation) <= 200.0f;
 }
 
 void AWUCharacter::UpdateDeathStateEffects()
@@ -478,7 +518,7 @@ void AWUCharacter::ReviveAtCorpse()
 		return;
 	}
 
-	Health = 100.0f;
+	Health = MaxHealth;
 	bIsDead = false;
 	bHasReleased = false;
 	UpdateDeathStateEffects();

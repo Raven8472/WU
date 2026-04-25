@@ -12,6 +12,7 @@ class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class UUserWidget;
+class AActor;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -91,6 +92,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	float BaseAttackDamage = 10.0f;
 
+	/** Maximum health used by the base prototype character */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float MaxHealth = 100.0f;
+
 	/** Current health of the character (replicated from server) */
 	UPROPERTY(Replicated)
 	float Health;
@@ -126,6 +131,34 @@ public:
 
 	/** Calculates outgoing damage (placeholder for future stat system) */
 	float CalculateDamage() const;
+
+	/** Returns health normalized to the max health for HUD usage */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetHealthPercent() const;
+
+	/** Returns the current health value for HUD usage */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetCurrentHealth() const;
+
+	/** Returns the maximum health value for HUD usage */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetMaxHealth() const;
+
+	/** Returns true if the character is dead */
+	UFUNCTION(BlueprintPure, Category = "Death")
+	bool IsDead() const;
+
+	/** Returns true if the character has released to spirit form */
+	UFUNCTION(BlueprintPure, Category = "Death")
+	bool HasReleased() const;
+
+	/** Returns true if the player is in released spirit form */
+	UFUNCTION(BlueprintPure, Category = "Death")
+	bool IsReleasedSpirit() const;
+
+	/** Returns true if the released spirit is close enough to revive at the corpse */
+	UFUNCTION(BlueprintPure, Category = "Death")
+	bool CanReviveAtCorpse() const;
 
 	/** Handles auto-release when the death timer expires */
 	void HandleAutoRelease();
