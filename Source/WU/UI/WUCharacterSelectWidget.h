@@ -1,0 +1,63 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Backend/WUClientSessionSubsystem.h"
+#include "Blueprint/UserWidget.h"
+#include "CharacterCreation/WUCharacterCreationTypes.h"
+#include "Styling/SlateBrush.h"
+#include "WUCharacterSelectWidget.generated.h"
+
+class SEditableTextBox;
+class SVerticalBox;
+class UTexture2D;
+
+UCLASS(Blueprintable)
+class WU_API UWUCharacterSelectWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	UWUCharacterSelectWidget(const FObjectInitializer& ObjectInitializer);
+
+protected:
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
+	TObjectPtr<UTexture2D> BackgroundTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
+	FString BackgroundSourcePath = TEXT("UI/Login/Login_Background.png");
+
+private:
+	UFUNCTION()
+	void HandleCharactersLoaded(const TArray<FWUBackendCharacterSummary>& LoadedCharacters);
+
+	UFUNCTION()
+	void HandleCharacterCreated(const FWUBackendCharacterSummary& Character);
+
+	UFUNCTION()
+	void HandleRequestFailed(const FString& ErrorMessage);
+
+	FReply HandleCreateClicked();
+	FReply HandleRefreshClicked();
+	FReply HandleSelectClicked(FString CharacterId);
+	FText GetStatusText() const;
+
+	void RefreshCharacterRows();
+	TSharedRef<SWidget> CreateCharacterRow(const FWUBackendCharacterSummary& Character);
+	UTexture2D* ResolveBackgroundTexture();
+
+private:
+	FSlateBrush BackgroundBrush;
+	FSlateBrush PanelBrush;
+	FText StatusText;
+	TSharedPtr<SVerticalBox> CharacterListBox;
+	TSharedPtr<SEditableTextBox> NameInputBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> LoadedBackgroundTexture;
+};

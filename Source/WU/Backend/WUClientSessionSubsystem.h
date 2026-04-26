@@ -108,6 +108,9 @@ public:
 	void CreateCharacter(const FWUCharacterCreateRequest& Request);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
+	void SelectCharacter(const FString& CharacterId);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
@@ -133,6 +136,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "WU|Session")
 	const TArray<FWUBackendCharacterSummary>& GetCharacters() const;
+
+	UFUNCTION(BlueprintPure, Category = "WU|Session")
+	const FString& GetSelectedCharacterId() const;
 
 protected:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "WU|Session")
@@ -164,4 +170,5 @@ private:
 	TArray<FWUBackendRealmSummary> Realms;
 	FString SelectedRealmId;
 	TArray<FWUBackendCharacterSummary> Characters;
+	FString SelectedCharacterId;
 };

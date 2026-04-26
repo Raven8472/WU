@@ -90,6 +90,11 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 	Request->ProcessRequest();
 }
 
+void UWUClientSessionSubsystem::SelectCharacter(const FString& CharacterId)
+{
+	SelectedCharacterId = CharacterId;
+}
+
 void UWUClientSessionSubsystem::ClearSession()
 {
 	AccessToken.Reset();
@@ -97,6 +102,7 @@ void UWUClientSessionSubsystem::ClearSession()
 	Realms.Reset();
 	SelectedRealmId.Reset();
 	Characters.Reset();
+	SelectedCharacterId.Reset();
 	OnSessionCleared.Broadcast();
 }
 
@@ -139,6 +145,11 @@ const FString& UWUClientSessionSubsystem::GetSelectedRealmId() const
 const TArray<FWUBackendCharacterSummary>& UWUClientSessionSubsystem::GetCharacters() const
 {
 	return Characters;
+}
+
+const FString& UWUClientSessionSubsystem::GetSelectedCharacterId() const
+{
+	return SelectedCharacterId;
 }
 
 void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
@@ -194,6 +205,7 @@ void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, 
 	AccessToken = NewAccessToken;
 	SelectedRealmId = Realms[0].RealmId;
 	Characters.Reset();
+	SelectedCharacterId.Reset();
 
 	OnLoginSucceeded.Broadcast();
 	ListCharacters();
@@ -278,6 +290,11 @@ void UWUClientSessionSubsystem::HandleListCharactersResponse(FHttpRequestPtr Req
 		}
 	}
 
+	if (SelectedCharacterId.IsEmpty() && !Characters.IsEmpty())
+	{
+		SelectedCharacterId = Characters[0].CharacterId;
+	}
+
 	OnCharactersLoaded.Broadcast(Characters);
 }
 
@@ -305,6 +322,7 @@ void UWUClientSessionSubsystem::HandleCreateCharacterResponse(FHttpRequestPtr Re
 	}
 
 	Characters.Add(Character);
+	SelectedCharacterId = Character.CharacterId;
 	OnCharacterCreated.Broadcast(Character);
 	OnCharactersLoaded.Broadcast(Characters);
 }
