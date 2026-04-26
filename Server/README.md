@@ -36,7 +36,7 @@ docker compose up --build
 That starts:
 
 - `wu-api` on port `5080`
-- `postgres` on port `5432`
+- `postgres` on host port `5433`
 - `redis` on port `6379`
 
 The first persistence flow is character creation:
