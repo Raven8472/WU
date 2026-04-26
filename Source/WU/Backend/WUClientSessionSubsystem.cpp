@@ -9,6 +9,16 @@
 #include "Serialization/JsonSerializer.h"
 #include "WU.h"
 
+FVector FWUBackendCharacterLocation::ToVector() const
+{
+	return FVector(X, Y, Z);
+}
+
+bool FWUBackendCharacterLocation::IsNearlyZero() const
+{
+	return ToVector().IsNearlyZero();
+}
+
 void UWUClientSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -93,6 +103,34 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 void UWUClientSessionSubsystem::SelectCharacter(const FString& CharacterId)
 {
 	SelectedCharacterId = CharacterId;
+}
+
+void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Location)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
+	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+
+	TSharedPtr<FJsonObject> LocationObject = MakeShared<FJsonObject>();
+	LocationObject->SetNumberField(TEXT("x"), Location.X);
+	LocationObject->SetNumberField(TEXT("y"), Location.Y);
+	LocationObject->SetNumberField(TEXT("z"), Location.Z);
+	RootObject->SetObjectField(TEXT("location"), LocationObject);
+
+	FString Body;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
+
+	const FString Path = FString::Printf(TEXT("/api/characters/%s/location"), *SelectedCharacterId);
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("PUT"), Path);
+	Request->SetContentAsString(Body);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleSaveCharacterLocationResponse);
+	Request->ProcessRequest();
 }
 
 void UWUClientSessionSubsystem::ClearSession()
@@ -327,6 +365,39 @@ void UWUClientSessionSubsystem::HandleCreateCharacterResponse(FHttpRequestPtr Re
 	OnCharactersLoaded.Broadcast(Characters);
 }
 
+void UWUClientSessionSubsystem::HandleSaveCharacterLocationResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		UE_LOG(LogWU, Warning, TEXT("Character location save failed: %s"), *ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		UE_LOG(LogWU, Warning, TEXT("Character location save failed: %s"), *ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendCharacterSummary UpdatedCharacter;
+	if (!TryParseCharacter(RootObject, UpdatedCharacter))
+	{
+		UE_LOG(LogWU, Warning, TEXT("Character location save response did not include a valid character."));
+		return;
+	}
+
+	for (FWUBackendCharacterSummary& Character : Characters)
+	{
+		if (Character.CharacterId == UpdatedCharacter.CharacterId)
+		{
+			Character = UpdatedCharacter;
+			return;
+		}
+	}
+}
+
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateRequest(const FString& Verb, const FString& Path) const
 {
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -474,6 +545,36 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 	}
 
 	OutCharacter.Level = FMath::Max(1, FMath::RoundToInt(LevelValue));
+
+	const TSharedPtr<FJsonObject>* LocationObject = nullptr;
+	if (JsonObject->TryGetObjectField(TEXT("location"), LocationObject))
+	{
+		TryParseLocation(*LocationObject, OutCharacter.Location);
+	}
+
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	double X = 0.0;
+	double Y = 0.0;
+	double Z = 0.0;
+	if (!JsonObject->TryGetNumberField(TEXT("x"), X)
+		|| !JsonObject->TryGetNumberField(TEXT("y"), Y)
+		|| !JsonObject->TryGetNumberField(TEXT("z"), Z))
+	{
+		return false;
+	}
+
+	OutLocation.X = static_cast<float>(X);
+	OutLocation.Y = static_cast<float>(Y);
+	OutLocation.Z = static_cast<float>(Z);
 	return true;
 }
 

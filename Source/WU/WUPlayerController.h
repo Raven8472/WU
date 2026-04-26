@@ -297,6 +297,9 @@ protected:
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
 
+	/** Saves selected character location when the controller leaves gameplay. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	/** Applies selected character identity after server-side possession. */
 	virtual void OnPossess(APawn* InPawn) override;
 
@@ -345,6 +348,9 @@ protected:
 	/** Applies the selected login character to this gameplay controller/pawn. */
 	void ApplySelectedCharacterSessionContext();
 
+	/** Persists the selected character's current world location. */
+	void SaveSelectedCharacterLocation();
+
 	/** Server-side player chat entry point. */
 	UFUNCTION(Server, Reliable)
 	void Server_SendChatMessage(const FString& Message);
@@ -369,5 +375,7 @@ private:
 
 	float LastChatMessageServerTime = -1000.0f;
 	FString AppliedSessionCharacterId;
+	FString AppliedSessionSpawnCharacterId;
+	FTimerHandle CharacterLocationSaveTimerHandle;
 
 };

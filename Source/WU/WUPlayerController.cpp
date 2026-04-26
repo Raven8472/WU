@@ -193,7 +193,32 @@ void AWUPlayerController::BeginPlay()
 		ApplySelectedCharacterSessionContext();
 		ApplyGameplayInputMode();
 		ShowTargetingDebugMessage(TEXT("WU targeting ready"));
+
+		if (GetWorld())
+		{
+			GetWorldTimerManager().SetTimer(
+				CharacterLocationSaveTimerHandle,
+				this,
+				&AWUPlayerController::SaveSelectedCharacterLocation,
+				10.0f,
+				true);
+		}
 	}
+}
+
+void AWUPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (IsLocalPlayerController())
+	{
+		SaveSelectedCharacterLocation();
+
+		if (GetWorld())
+		{
+			GetWorldTimerManager().ClearTimer(CharacterLocationSaveTimerHandle);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void AWUPlayerController::OnPossess(APawn* InPawn)
@@ -863,11 +888,6 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 	}
 
 	const FString& SelectedCharacterId = Session->GetSelectedCharacterId();
-	if (AppliedSessionCharacterId == SelectedCharacterId)
-	{
-		return;
-	}
-
 	const FWUBackendCharacterSummary* SelectedCharacter = nullptr;
 	for (const FWUBackendCharacterSummary& SessionCharacter : Session->GetCharacters())
 	{
@@ -891,10 +911,41 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
 	{
 		WUCharacter->SetDisplayName(FText::FromString(SelectedCharacter->Name));
+
+		if (AppliedSessionSpawnCharacterId != SelectedCharacterId && !SelectedCharacter->Location.IsNearlyZero())
+		{
+			WUCharacter->SetActorLocation(
+				SelectedCharacter->Location.ToVector(),
+				false,
+				nullptr,
+				ETeleportType::TeleportPhysics);
+			AppliedSessionSpawnCharacterId = SelectedCharacterId;
+		}
 	}
 
-	AppliedSessionCharacterId = SelectedCharacterId;
-	ShowTargetingDebugMessage(FString::Printf(TEXT("Entered as %s"), *SelectedCharacter->Name), FColor::Green);
+	if (AppliedSessionCharacterId != SelectedCharacterId)
+	{
+		AppliedSessionCharacterId = SelectedCharacterId;
+		ShowTargetingDebugMessage(FString::Printf(TEXT("Entered as %s"), *SelectedCharacter->Name), FColor::Green);
+	}
+}
+
+void AWUPlayerController::SaveSelectedCharacterLocation()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	const APawn* ControlledPawn = GetPawn();
+	if (!Session || !ControlledPawn || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		return;
+	}
+
+	Session->SaveSelectedCharacterLocation(ControlledPawn->GetActorLocation());
 }
 
 void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message)

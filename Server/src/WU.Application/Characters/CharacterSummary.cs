@@ -7,4 +7,5 @@ public sealed record CharacterSummary(
     string Name,
     EWuCharacterRace Race,
     EWuCharacterSex Sex,
-    int Level);
+    int Level,
+    CharacterLocation Location);

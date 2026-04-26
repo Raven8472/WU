@@ -25,6 +25,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<ICharacterRepository, PostgresCharacterRepository>();
 builder.Services.AddScoped<CharacterCreationService>();
 builder.Services.AddScoped<CharacterQueryService>();
+builder.Services.AddScoped<CharacterLocationService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
 builder.Services.AddScoped<AuthService>();
@@ -118,6 +119,19 @@ app.MapGet("/api/accounts/{accountId:guid}/realms/{realmId:guid}/characters", as
         CharacterListStatus.Found => Results.Ok(result.Characters),
         CharacterListStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_list_request", messages = result.Errors }),
         _ => Results.Problem("Characters could not be loaded.")
+    };
+});
+
+app.MapPut("/api/characters/{characterId:guid}/location", async (Guid characterId, UpdateCharacterLocationRequest request, CharacterLocationService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.UpdateAsync(characterId, request, cancellationToken);
+
+    return result.Status switch
+    {
+        CharacterLocationStatus.Updated => Results.Ok(result.Character),
+        CharacterLocationStatus.NotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CharacterLocationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_location_request", messages = result.Errors }),
+        _ => Results.Problem("The character location could not be updated.")
     };
 });
 

@@ -42,6 +42,24 @@ struct FWUBackendRealmSummary
 };
 
 USTRUCT(BlueprintType)
+struct FWUBackendCharacterLocation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	float X = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	float Y = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	float Z = 0.0f;
+
+	FVector ToVector() const;
+	bool IsNearlyZero() const;
+};
+
+USTRUCT(BlueprintType)
 struct FWUBackendCharacterSummary
 {
 	GENERATED_BODY()
@@ -60,6 +78,9 @@ struct FWUBackendCharacterSummary
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	int32 Level = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	FWUBackendCharacterLocation Location;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUClientSessionSimpleSignature);
@@ -111,6 +132,9 @@ public:
 	void SelectCharacter(const FString& CharacterId);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
+	void SaveSelectedCharacterLocation(const FVector& Location);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
@@ -149,6 +173,7 @@ private:
 	void HandleCurrentSessionResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleListCharactersResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleCreateCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleSaveCharacterLocationResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
@@ -161,6 +186,7 @@ private:
 	static bool TryParseAccount(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendAccountSummary& OutAccount);
 	static bool TryParseRealm(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendRealmSummary& OutRealm);
 	static bool TryParseCharacter(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterSummary& OutCharacter);
+	static bool TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation);
 	static bool TryParseRace(const FString& Value, EWUCharacterRace& OutRace);
 	static bool TryParseSex(const FString& Value, EWUCharacterSex& OutSex);
 

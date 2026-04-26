@@ -20,7 +20,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             await InsertAppearanceAsync(connection, transaction, characterId, command, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return new CharacterSummary(characterId, command.Name, command.Race, command.Sex, Level: 1);
+            return new CharacterSummary(characterId, command.Name, command.Race, command.Sex, Level: 1, new CharacterLocation(0.0f, 0.0f, 0.0f));
         }
         catch (PostgresException exception) when (exception.SqlState == UniqueViolationSqlState && IsCharacterNameConstraint(exception))
         {
@@ -37,7 +37,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     public async Task<IReadOnlyList<CharacterSummary>> ListForAccountRealmAsync(Guid accountId, Guid realmId, CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT id, name, race, sex, level
+            SELECT id, name, race, sex, level, position_x, position_y, position_z
             FROM characters
             WHERE account_id = @account_id
               AND realm_id = @realm_id
@@ -54,15 +54,40 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         await using var reader = await dbCommand.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            characters.Add(new CharacterSummary(
-                CharacterId: reader.GetGuid(0),
-                Name: reader.GetString(1),
-                Race: (EWuCharacterRace)reader.GetInt16(2),
-                Sex: (EWuCharacterSex)reader.GetInt16(3),
-                Level: reader.GetInt32(4)));
+            characters.Add(ReadCharacterSummary(reader));
         }
 
         return characters;
+    }
+
+    public async Task<CharacterSummary?> UpdateLocationAsync(Guid accountId, Guid realmId, Guid characterId, CharacterLocation location, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE characters
+            SET position_x = @position_x,
+                position_y = @position_y,
+                position_z = @position_z,
+                updated_at = now()
+            WHERE id = @character_id
+              AND account_id = @account_id
+              AND realm_id = @realm_id
+              AND deleted_at IS NULL
+            RETURNING id, name, race, sex, level, position_x, position_y, position_z;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var dbCommand = new NpgsqlCommand(sql, connection);
+        dbCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+        dbCommand.Parameters.AddWithValue("account_id", NpgsqlDbType.Uuid, accountId);
+        dbCommand.Parameters.AddWithValue("realm_id", NpgsqlDbType.Uuid, realmId);
+        dbCommand.Parameters.AddWithValue("position_x", NpgsqlDbType.Real, location.X);
+        dbCommand.Parameters.AddWithValue("position_y", NpgsqlDbType.Real, location.Y);
+        dbCommand.Parameters.AddWithValue("position_z", NpgsqlDbType.Real, location.Z);
+
+        await using var reader = await dbCommand.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadCharacterSummary(reader)
+            : null;
     }
 
     private static async Task<Guid> InsertCharacterAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CreateCharacterCommand command, CancellationToken cancellationToken)
@@ -106,5 +131,19 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     private static bool IsCharacterNameConstraint(PostgresException exception)
     {
         return string.Equals(exception.ConstraintName, "uq_characters_realm_name", StringComparison.Ordinal);
+    }
+
+    private static CharacterSummary ReadCharacterSummary(NpgsqlDataReader reader)
+    {
+        return new CharacterSummary(
+            CharacterId: reader.GetGuid(0),
+            Name: reader.GetString(1),
+            Race: (EWuCharacterRace)reader.GetInt16(2),
+            Sex: (EWuCharacterSex)reader.GetInt16(3),
+            Level: reader.GetInt32(4),
+            Location: new CharacterLocation(
+                X: reader.GetFloat(5),
+                Y: reader.GetFloat(6),
+                Z: reader.GetFloat(7)));
     }
 }
