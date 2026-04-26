@@ -6,6 +6,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "EngineUtils.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -13,10 +14,15 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/Widget.h"
 #include "InputCoreTypes.h"
+#include "CharacterCreation/WUCharacterCreatorPreviewActor.h"
 #include "WUCharacter.h"
+#include "UI/WUCharacterCreatorWidget.h"
+#include "UI/WUChatWidget.h"
+#include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
 #include "UI/WUTargetFrameWidget.h"
 #include "WU.h"
+#include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
@@ -38,6 +44,10 @@ namespace
 
 AWUPlayerController::AWUPlayerController()
 {
+	CharacterCreatorWidgetClass = UWUCharacterCreatorWidget::StaticClass();
+	CharacterCreatorPreviewActorClass = AWUCharacterCreatorPreviewActor::StaticClass();
+	ChatWidgetClass = UWUChatWidget::StaticClass();
+	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
 }
@@ -85,6 +95,59 @@ void AWUPlayerController::BeginPlay()
 					LegacyPlayerFrame->SetVisibility(ESlateVisibility::Collapsed);
 				}
 			}
+		}
+	}
+
+	if (!ChatWidgetClass)
+	{
+		ChatWidgetClass = UWUChatWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && ChatWidgetClass)
+	{
+		ChatWidget = CreateWidget<UWUChatWidget>(this, ChatWidgetClass);
+
+		if (ChatWidget)
+		{
+			ChatWidget->AddToPlayerScreen(7);
+			ApplyViewportUnitFrameSlot(ChatWidget, ChatViewportSize, ChatViewportPosition, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f));
+		}
+	}
+
+	if (!InventoryWidgetClass)
+	{
+		InventoryWidgetClass = UWUInventoryWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && InventoryWidgetClass)
+	{
+		InventoryWidget = CreateWidget<UWUInventoryWidget>(this, InventoryWidgetClass);
+
+		if (InventoryWidget)
+		{
+			InventoryWidget->AddToPlayerScreen(8);
+			ApplyViewportUnitFrameSlot(InventoryWidget, InventoryViewportSize, InventoryViewportPosition, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f));
+		}
+	}
+
+	if (!CharacterCreatorWidgetClass)
+	{
+		CharacterCreatorWidgetClass = UWUCharacterCreatorWidget::StaticClass();
+	}
+
+	if (!CharacterCreatorPreviewActorClass)
+	{
+		CharacterCreatorPreviewActorClass = AWUCharacterCreatorPreviewActor::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && CharacterCreatorWidgetClass)
+	{
+		CharacterCreatorWidget = CreateWidget<UWUCharacterCreatorWidget>(this, CharacterCreatorWidgetClass);
+
+		if (CharacterCreatorWidget)
+		{
+			CharacterCreatorWidget->AddToPlayerScreen(9);
+			ApplyViewportUnitFrameSlot(CharacterCreatorWidget, CharacterCreatorViewportSize, CharacterCreatorViewportPosition, FAnchors(0.0f, 0.0f), FVector2D(0.0f, 0.0f));
 		}
 	}
 
@@ -179,6 +242,12 @@ void AWUPlayerController::SetupInputComponent()
 	{
 		InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AWUPlayerController::TargetNextCharacter);
 	}
+
+	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &AWUPlayerController::OpenChatInput);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AWUPlayerController::CloseChatInput);
+	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
+	InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
+	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &AWUPlayerController::ToggleCharacterCreator);
 }
 
 bool AWUPlayerController::ShouldUseTouchControls() const
@@ -257,7 +326,7 @@ void AWUPlayerController::ClearCurrentTarget()
 
 void AWUPlayerController::TargetUnderCursor()
 {
-	if (!IsLocalPlayerController() || !GetWorld())
+	if (!IsLocalPlayerController() || !GetWorld() || IsChatInputOpen())
 	{
 		return;
 	}
@@ -334,7 +403,7 @@ void AWUPlayerController::TargetUnderCursor()
 
 void AWUPlayerController::TargetNextCharacter()
 {
-	if (!GetWorld())
+	if (!GetWorld() || IsChatInputOpen())
 	{
 		return;
 	}
@@ -407,6 +476,401 @@ void AWUPlayerController::TargetNextCharacter()
 	const int32 NextIndex = Candidates.IsValidIndex(CurrentIndex + 1) ? CurrentIndex + 1 : 0;
 	SetCurrentTarget(Candidates[NextIndex]);
 	ShowTargetingDebugMessage(FString::Printf(TEXT("Tab target: %d candidates"), Candidates.Num()));
+}
+
+void AWUPlayerController::OpenChatInput()
+{
+	if (!IsLocalPlayerController() || !ChatWidget)
+	{
+		return;
+	}
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+
+	ChatWidget->OpenInput();
+}
+
+void AWUPlayerController::CloseChatInput()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (ChatWidget && ChatWidget->IsInputOpen())
+	{
+		ChatWidget->CloseInput();
+		SetIgnoreMoveInput(false);
+		SetIgnoreLookInput(false);
+		ApplyGameplayInputMode();
+		return;
+	}
+
+	if (IsInventoryOpen())
+	{
+		HideInventory();
+		return;
+	}
+
+	if (IsCharacterCreatorOpen())
+	{
+		HideCharacterCreator();
+		return;
+	}
+
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+	ApplyGameplayInputMode();
+}
+
+void AWUPlayerController::SubmitChatMessage(const FString& RawMessage)
+{
+	const FString SanitizedMessage = SanitizeChatMessage(RawMessage);
+	if (SanitizedMessage.IsEmpty())
+	{
+		return;
+	}
+
+	Server_SendChatMessage(SanitizedMessage);
+}
+
+void AWUPlayerController::ToggleInventory()
+{
+	if (!IsLocalPlayerController() || !InventoryWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
+	{
+		return;
+	}
+
+	InventoryWidget->ToggleInventory();
+
+	if (InventoryWidget->IsInventoryOpen())
+	{
+		bShowMouseCursor = true;
+		bEnableClickEvents = true;
+		bEnableMouseOverEvents = true;
+
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(InputMode);
+	}
+	else
+	{
+		ApplyGameplayInputMode();
+	}
+}
+
+void AWUPlayerController::ShowInventory()
+{
+	if (!IsLocalPlayerController() || !InventoryWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
+	{
+		return;
+	}
+
+	if (!InventoryWidget->IsInventoryOpen())
+	{
+		InventoryWidget->ShowInventory();
+	}
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+}
+
+void AWUPlayerController::HideInventory()
+{
+	if (!IsLocalPlayerController() || !InventoryWidget)
+	{
+		return;
+	}
+
+	InventoryWidget->HideInventory();
+	ApplyGameplayInputMode();
+}
+
+void AWUPlayerController::ToggleCharacterCreator()
+{
+	if (!IsLocalPlayerController() || !CharacterCreatorWidget || IsChatInputOpen())
+	{
+		return;
+	}
+
+	if (CharacterCreatorWidget->IsCreatorOpen())
+	{
+		HideCharacterCreator();
+	}
+	else
+	{
+		ShowCharacterCreator();
+	}
+}
+
+void AWUPlayerController::ShowCharacterCreator()
+{
+	if (!IsLocalPlayerController() || !CharacterCreatorWidget || IsChatInputOpen())
+	{
+		return;
+	}
+
+	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
+	{
+		InventoryWidget->HideInventory();
+	}
+
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+
+	CharacterCreatorWidget->ShowCreator();
+	if (CharacterCreatorPreviewActor)
+	{
+		CharacterCreatorPreviewActor->SetActorHiddenInGame(false);
+	}
+}
+
+void AWUPlayerController::HideCharacterCreator()
+{
+	if (!IsLocalPlayerController() || !CharacterCreatorWidget)
+	{
+		return;
+	}
+
+	CharacterCreatorWidget->HideCreator();
+
+	if (CharacterCreatorPreviewActor)
+	{
+		CharacterCreatorPreviewActor->SetActorHiddenInGame(true);
+	}
+
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+	ApplyGameplayInputMode();
+}
+
+void AWUPlayerController::PreviewCharacterCreateRequest(const FWUCharacterCreateRequest& Request)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (AWUCharacterCreatorPreviewActor* PreviewActor = EnsureCharacterCreatorPreviewActor())
+	{
+		PositionCharacterCreatorPreviewActor();
+		PreviewActor->ApplyCreateRequest(Request);
+		PreviewActor->SetActorHiddenInGame(false);
+	}
+}
+
+void AWUPlayerController::RotateCharacterCreatorPreview(float YawDelta)
+{
+	if (CharacterCreatorPreviewActor)
+	{
+		CharacterCreatorPreviewActor->RotatePreview(YawDelta);
+	}
+}
+
+void AWUPlayerController::SubmitCharacterCreateRequest(const FWUCharacterCreateRequest& Request)
+{
+	FWUCharacterCreateRequest SanitizedRequest = Request;
+	SanitizedRequest.CharacterName = SanitizeCharacterName(Request.CharacterName);
+
+	if (SanitizedRequest.CharacterName.Len() < 3)
+	{
+		ShowTargetingDebugMessage(TEXT("Character name must be at least 3 characters"), FColor::Yellow);
+		return;
+	}
+
+	const FString Summary = FString::Printf(
+		TEXT("Draft character: %s %s %s"),
+		*SanitizedRequest.CharacterName,
+		*WUCharacterCreation::RaceToString(SanitizedRequest.Race),
+		*WUCharacterCreation::SexToString(SanitizedRequest.Sex)
+	);
+
+	UE_LOG(LogWU, Display, TEXT("%s"), *Summary);
+	ShowTargetingDebugMessage(Summary, FColor::Green);
+}
+
+bool AWUPlayerController::IsChatInputOpen() const
+{
+	return ChatWidget && ChatWidget->IsInputOpen();
+}
+
+bool AWUPlayerController::IsInventoryOpen() const
+{
+	return InventoryWidget && InventoryWidget->IsInventoryOpen();
+}
+
+bool AWUPlayerController::IsCharacterCreatorOpen() const
+{
+	return CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen();
+}
+
+AWUCharacterCreatorPreviewActor* AWUPlayerController::EnsureCharacterCreatorPreviewActor()
+{
+	if (CharacterCreatorPreviewActor || !GetWorld() || !CharacterCreatorPreviewActorClass)
+	{
+		return CharacterCreatorPreviewActor;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = this;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	CharacterCreatorPreviewActor = GetWorld()->SpawnActor<AWUCharacterCreatorPreviewActor>(
+		CharacterCreatorPreviewActorClass,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		SpawnParameters
+	);
+
+	return CharacterCreatorPreviewActor;
+}
+
+void AWUPlayerController::PositionCharacterCreatorPreviewActor()
+{
+	if (!CharacterCreatorPreviewActor)
+	{
+		return;
+	}
+
+	const APawn* ControlledPawn = GetPawn();
+	const FVector Origin = ControlledPawn ? ControlledPawn->GetActorLocation() : FVector::ZeroVector;
+	const FVector Forward = ControlledPawn ? ControlledPawn->GetActorForwardVector() : FVector::ForwardVector;
+	const FVector Right = ControlledPawn ? ControlledPawn->GetActorRightVector() : FVector::RightVector;
+	const FVector PreviewLocation = Origin + (Forward * 180.0f) + (Right * 190.0f) - FVector(0.0f, 0.0f, 92.0f);
+	const FRotator PreviewRotation(0.0f, (Origin - PreviewLocation).Rotation().Yaw, 0.0f);
+
+	CharacterCreatorPreviewActor->SetActorLocationAndRotation(PreviewLocation, PreviewRotation);
+}
+
+FString AWUPlayerController::SanitizeCharacterName(const FString& RawName) const
+{
+	FString Result;
+	const FString TrimmedName = RawName.TrimStartAndEnd();
+
+	for (const TCHAR CharacterValue : TrimmedName)
+	{
+		if (FChar::IsAlpha(CharacterValue))
+		{
+			Result.AppendChar(CharacterValue);
+		}
+	}
+
+	if (Result.Len() > 16)
+	{
+		Result.LeftInline(16);
+	}
+
+	if (!Result.IsEmpty())
+	{
+		Result[0] = FChar::ToUpper(Result[0]);
+		for (int32 Index = 1; Index < Result.Len(); ++Index)
+		{
+			Result[Index] = FChar::ToLower(Result[Index]);
+		}
+	}
+
+	return Result;
+}
+
+FString AWUPlayerController::SanitizeChatMessage(const FString& RawMessage) const
+{
+	FString Message = RawMessage.TrimStartAndEnd();
+	Message.ReplaceInline(TEXT("\r"), TEXT(" "));
+	Message.ReplaceInline(TEXT("\n"), TEXT(" "));
+	Message.ReplaceInline(TEXT("\t"), TEXT(" "));
+
+	if (MaxChatMessageLength > 0 && Message.Len() > MaxChatMessageLength)
+	{
+		Message = Message.Left(MaxChatMessageLength).TrimStartAndEnd();
+	}
+
+	return Message;
+}
+
+FString AWUPlayerController::GetChatDisplayName() const
+{
+	if (const AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
+	{
+		const FString CharacterName = WUCharacter->GetDisplayName().ToString();
+		if (!CharacterName.IsEmpty())
+		{
+			return CharacterName;
+		}
+	}
+
+	if (PlayerState)
+	{
+		const FString PlayerName = PlayerState->GetPlayerName();
+		if (!PlayerName.IsEmpty())
+		{
+			return PlayerName;
+		}
+	}
+
+	return TEXT("Player");
+}
+
+void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message)
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	const FString SanitizedMessage = SanitizeChatMessage(Message);
+	if (SanitizedMessage.IsEmpty())
+	{
+		return;
+	}
+
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastChatMessageServerTime < ChatMessageCooldownSeconds)
+	{
+		return;
+	}
+
+	LastChatMessageServerTime = Now;
+	const FString SenderName = GetChatDisplayName();
+
+	for (TActorIterator<AWUPlayerController> It(GetWorld()); It; ++It)
+	{
+		if (AWUPlayerController* Recipient = *It)
+		{
+			Recipient->Client_ReceiveChatMessage(SenderName, SanitizedMessage);
+		}
+	}
+}
+
+void AWUPlayerController::Client_ReceiveChatMessage_Implementation(const FString& SenderName, const FString& Message)
+{
+	if (ChatWidget)
+	{
+		ChatWidget->AddChatMessage(FText::FromString(SenderName), FText::FromString(Message));
+	}
 }
 
 void AWUPlayerController::ApplyGameplayInputMode()

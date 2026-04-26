@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CharacterCreation/WUCharacterCreationTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "WUPlayerController.generated.h"
 
@@ -10,7 +11,11 @@ class UInputMappingContext;
 class UInputAction;
 class UUserWidget;
 class AActor;
+class AWUCharacterCreatorPreviewActor;
 class AWUCharacter;
+class UWUCharacterCreatorWidget;
+class UWUChatWidget;
+class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
 class UWUTargetFrameWidget;
 
@@ -78,6 +83,70 @@ protected:
 	/** Hides the legacy Blueprint player frame when the native unit frame is active. */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
 	bool bHideLegacyPlayerFrameWidget = true;
+
+	/** Native player chat widget to spawn for the local player */
+	UPROPERTY(EditAnywhere, Category = "UI|Chat")
+	TSubclassOf<UWUChatWidget> ChatWidgetClass;
+
+	/** Pointer to the native player chat widget */
+	UPROPERTY()
+	TObjectPtr<UWUChatWidget> ChatWidget;
+
+	/** Viewport position for the player chat widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Chat")
+	FVector2D ChatViewportPosition = FVector2D(24.0f, -220.0f);
+
+	/** Viewport size for the player chat widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Chat")
+	FVector2D ChatViewportSize = FVector2D(520.0f, 220.0f);
+
+	/** Maximum number of characters accepted in a single chat message. */
+	UPROPERTY(EditAnywhere, Category = "UI|Chat", meta = (ClampMin = 1, ClampMax = 512))
+	int32 MaxChatMessageLength = 160;
+
+	/** Minimum time between chat messages from the same controller. */
+	UPROPERTY(EditAnywhere, Category = "UI|Chat", meta = (ClampMin = 0.0f, Units = "s"))
+	float ChatMessageCooldownSeconds = 0.25f;
+
+	/** Native inventory shell widget to spawn for the local player */
+	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
+	TSubclassOf<UWUInventoryWidget> InventoryWidgetClass;
+
+	/** Pointer to the native inventory shell widget */
+	UPROPERTY()
+	TObjectPtr<UWUInventoryWidget> InventoryWidget;
+
+	/** Viewport position for the inventory shell widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
+	FVector2D InventoryViewportPosition = FVector2D(-24.0f, -150.0f);
+
+	/** Viewport size for the inventory shell widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
+	FVector2D InventoryViewportSize = FVector2D(520.0f, 340.0f);
+
+	/** Native character creator shell widget to spawn for the local player */
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	TSubclassOf<UWUCharacterCreatorWidget> CharacterCreatorWidgetClass;
+
+	/** Pointer to the native character creator shell widget */
+	UPROPERTY()
+	TObjectPtr<UWUCharacterCreatorWidget> CharacterCreatorWidget;
+
+	/** World preview actor used by the local character creator shell */
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	TSubclassOf<AWUCharacterCreatorPreviewActor> CharacterCreatorPreviewActorClass;
+
+	/** Pointer to the local-only character creator preview actor */
+	UPROPERTY()
+	TObjectPtr<AWUCharacterCreatorPreviewActor> CharacterCreatorPreviewActor;
+
+	/** Viewport position for the character creator shell widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FVector2D CharacterCreatorViewportPosition = FVector2D(32.0f, 96.0f);
+
+	/** Viewport size for the character creator shell widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FVector2D CharacterCreatorViewportSize = FVector2D(430.0f, 520.0f);
 
 	/** Enemy target frame widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
@@ -175,6 +244,54 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input|Cursor")
 	void ApplyUIInputMode();
 
+	/** Opens the chat input line and gives it keyboard focus. */
+	UFUNCTION(BlueprintCallable, Category = "Chat")
+	void OpenChatInput();
+
+	/** Closes the chat input line and restores gameplay input. */
+	UFUNCTION(BlueprintCallable, Category = "Chat")
+	void CloseChatInput();
+
+	/** Sends a chat message through the current server transport. */
+	UFUNCTION(BlueprintCallable, Category = "Chat")
+	void SubmitChatMessage(const FString& RawMessage);
+
+	/** Toggles the inventory shell window. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void ToggleInventory();
+
+	/** Shows the inventory shell window. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void ShowInventory();
+
+	/** Hides the inventory shell window. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void HideInventory();
+
+	/** Toggles the local character creator shell. */
+	UFUNCTION(BlueprintCallable, Category = "Character Creation")
+	void ToggleCharacterCreator();
+
+	/** Shows the local character creator shell. */
+	UFUNCTION(BlueprintCallable, Category = "Character Creation")
+	void ShowCharacterCreator();
+
+	/** Hides the local character creator shell. */
+	UFUNCTION(BlueprintCallable, Category = "Character Creation")
+	void HideCharacterCreator();
+
+	/** Applies a draft character create request to the local preview actor. */
+	UFUNCTION(BlueprintCallable, Category = "Character Creation")
+	void PreviewCharacterCreateRequest(const FWUCharacterCreateRequest& Request);
+
+	/** Rotates the local character creator preview actor. */
+	UFUNCTION(BlueprintCallable, Category = "Character Creation")
+	void RotateCharacterCreatorPreview(float YawDelta);
+
+	/** Handles the draft create request until backend persistence exists. */
+	UFUNCTION(BlueprintCallable, Category = "Character Creation")
+	void SubmitCharacterCreateRequest(const FWUCharacterCreateRequest& Request);
+
 protected:
 
 	/** Gameplay initialization */
@@ -195,6 +312,38 @@ protected:
 	/** Finds the nearest selectable target close to a world-space ray. */
 	AWUCharacter* FindSelectableTargetNearRay(const FVector& RayOrigin, const FVector& RayDirection, float MaxDistance, float RayTolerance) const;
 
+	/** Returns true while the chat text entry is active. */
+	bool IsChatInputOpen() const;
+
+	/** Returns true while the inventory shell window is open. */
+	bool IsInventoryOpen() const;
+
+	/** Returns true while the character creator shell window is open. */
+	bool IsCharacterCreatorOpen() const;
+
+	/** Ensures a local-only preview actor exists for the character creator. */
+	AWUCharacterCreatorPreviewActor* EnsureCharacterCreatorPreviewActor();
+
+	/** Places the local-only preview actor near the controlled pawn. */
+	void PositionCharacterCreatorPreviewActor();
+
+	/** Sanitizes player-entered character names for the draft request. */
+	FString SanitizeCharacterName(const FString& RawName) const;
+
+	/** Sanitizes raw player chat before local/server handling. */
+	FString SanitizeChatMessage(const FString& RawMessage) const;
+
+	/** Returns the display name used for outgoing chat. */
+	FString GetChatDisplayName() const;
+
+	/** Server-side player chat entry point. */
+	UFUNCTION(Server, Reliable)
+	void Server_SendChatMessage(const FString& Message);
+
+	/** Client-side chat delivery. */
+	UFUNCTION(Client, Reliable)
+	void Client_ReceiveChatMessage(const FString& SenderName, const FString& Message);
+
 	/** Client-side target update used when server-authoritative damage selects a target. */
 	UFUNCTION(Client, Reliable)
 	void Client_AutoTargetDamagedCharacter(AWUCharacter* DamagedCharacter);
@@ -206,5 +355,9 @@ protected:
 	/** Clears the target if the selected actor is destroyed. */
 	UFUNCTION()
 	void OnCurrentTargetDestroyed(AActor* DestroyedActor);
+
+private:
+
+	float LastChatMessageServerTime = -1000.0f;
 
 };
