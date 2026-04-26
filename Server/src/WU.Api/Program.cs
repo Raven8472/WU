@@ -1,6 +1,8 @@
 using WU.Application.Backend;
+using WU.Application.Auth;
 using WU.Application.Characters;
 using WU.Domain.Characters;
+using WU.Infrastructure.Auth;
 using WU.Infrastructure.Characters;
 using WU.Infrastructure.Configuration;
 using Npgsql;
@@ -23,6 +25,9 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<ICharacterRepository, PostgresCharacterRepository>();
 builder.Services.AddScoped<CharacterCreationService>();
 builder.Services.AddScoped<CharacterQueryService>();
+builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
+builder.Services.AddScoped<AuthSessionTokenService>();
+builder.Services.AddScoped<AuthService>();
 
 var app = builder.Build();
 
@@ -52,6 +57,36 @@ app.MapGet("/health/ready", (IConfiguration configuration) =>
 app.MapGet("/api/backend/manifest", (BackendManifestService manifestService) =>
 {
     return Results.Ok(manifestService.GetManifest());
+});
+
+app.MapPost("/api/auth/dev-login", async (AuthService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.CreateDevelopmentLoginAsync(cancellationToken);
+
+    return result.Status switch
+    {
+        AuthLoginStatus.SignedIn => Results.Ok(result.Response),
+        AuthLoginStatus.DevAccountMissing => Results.Problem("The development account or realm seed data is missing."),
+        _ => Results.Problem("Development login failed.")
+    };
+});
+
+app.MapGet("/api/auth/me", async (HttpRequest request, AuthService service, CancellationToken cancellationToken) =>
+{
+    var token = BearerTokenReader.Read(request);
+    if (string.IsNullOrWhiteSpace(token))
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await service.GetCurrentSessionAsync(token, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrentSessionStatus.Found => Results.Ok(result.Response),
+        CurrentSessionStatus.InvalidToken => Results.Unauthorized(),
+        _ => Results.Problem("The current session could not be loaded.")
+    };
 });
 
 app.MapGet("/api/characters/schema", () => Results.Ok(new CharacterCreationSchema(
@@ -87,3 +122,20 @@ app.MapGet("/api/accounts/{accountId:guid}/realms/{realmId:guid}/characters", as
 });
 
 app.Run();
+
+internal static class BearerTokenReader
+{
+    public static string? Read(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.ToString();
+        if (string.IsNullOrWhiteSpace(header))
+        {
+            return null;
+        }
+
+        const string prefix = "Bearer ";
+        return header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? header[prefix.Length..].Trim()
+            : null;
+    }
+}

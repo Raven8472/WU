@@ -22,6 +22,8 @@ The API exposes:
 - `GET /health/live`
 - `GET /health/ready`
 - `GET /api/backend/manifest`
+- `POST /api/auth/dev-login`
+- `GET /api/auth/me`
 - `GET /api/characters/schema`
 - `POST /api/characters`
 - `GET /api/accounts/{accountId}/realms/{realmId}/characters`
@@ -69,9 +71,24 @@ Read the dev account's characters:
 curl http://localhost:5080/api/accounts/00000000-0000-0000-0000-000000000101/realms/00000000-0000-0000-0000-000000000001/characters
 ```
 
+## Development Login
+
+The backend has a development-only login path so we can stop hand-copying seeded account IDs while testing character select:
+
+```bash
+curl -s -X POST http://localhost:5080/api/auth/dev-login && echo
+```
+
+That returns a temporary bearer token, the seeded development account, and the local development realm. Use the token with:
+
+```bash
+TOKEN="paste-token-here"
+curl -s http://localhost:5080/api/auth/me -H "Authorization: Bearer $TOKEN" && echo
+```
+
 ## Login Preparation
 
-The current backend uses a seeded development account so we can test persistence before building authentication. The login server should arrive as its own API slice, but still inside this modular backend at first:
+The real login server should keep this API shape, but replace the development-only endpoint with proper credential handling:
 
 - `POST /api/auth/login`: validate credentials and create a session.
 - `POST /api/auth/refresh`: rotate a session token.
