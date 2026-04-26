@@ -24,6 +24,7 @@ The API exposes:
 - `GET /api/backend/manifest`
 - `GET /api/characters/schema`
 - `POST /api/characters`
+- `GET /api/accounts/{accountId}/realms/{realmId}/characters`
 
 ## Ubuntu Runtime
 
@@ -61,3 +62,20 @@ Example body:
   }
 }
 ```
+
+Read the dev account's characters:
+
+```bash
+curl http://localhost:5080/api/accounts/00000000-0000-0000-0000-000000000101/realms/00000000-0000-0000-0000-000000000001/characters
+```
+
+## Login Preparation
+
+The current backend uses a seeded development account so we can test persistence before building authentication. The login server should arrive as its own API slice, but still inside this modular backend at first:
+
+- `POST /api/auth/login`: validate credentials and create a session.
+- `POST /api/auth/refresh`: rotate a session token.
+- `POST /api/auth/logout`: revoke the current session.
+- `GET /api/auth/me`: return the current account and available realms.
+
+The Unreal client should eventually authenticate with the backend, receive a short-lived session token, list characters, select one, and then pass the session token to a UE dedicated zone server. The zone server should verify that token with the backend before loading character state.

@@ -1,6 +1,7 @@
 using Npgsql;
 using NpgsqlTypes;
 using WU.Application.Characters;
+using WU.Domain.Characters;
 
 namespace WU.Infrastructure.Characters;
 
@@ -31,6 +32,37 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    public async Task<IReadOnlyList<CharacterSummary>> ListForAccountRealmAsync(Guid accountId, Guid realmId, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT id, name, race, sex, level
+            FROM characters
+            WHERE account_id = @account_id
+              AND realm_id = @realm_id
+              AND deleted_at IS NULL
+            ORDER BY created_at ASC;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var dbCommand = new NpgsqlCommand(sql, connection);
+        dbCommand.Parameters.AddWithValue("account_id", NpgsqlDbType.Uuid, accountId);
+        dbCommand.Parameters.AddWithValue("realm_id", NpgsqlDbType.Uuid, realmId);
+
+        List<CharacterSummary> characters = [];
+        await using var reader = await dbCommand.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            characters.Add(new CharacterSummary(
+                CharacterId: reader.GetGuid(0),
+                Name: reader.GetString(1),
+                Race: (EWuCharacterRace)reader.GetInt16(2),
+                Sex: (EWuCharacterSex)reader.GetInt16(3),
+                Level: reader.GetInt32(4)));
+        }
+
+        return characters;
     }
 
     private static async Task<Guid> InsertCharacterAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CreateCharacterCommand command, CancellationToken cancellationToken)

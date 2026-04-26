@@ -22,6 +22,7 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddScoped<ICharacterRepository, PostgresCharacterRepository>();
 builder.Services.AddScoped<CharacterCreationService>();
+builder.Services.AddScoped<CharacterQueryService>();
 
 var app = builder.Build();
 
@@ -70,6 +71,18 @@ app.MapPost("/api/characters", async (CreateCharacterRequest request, CharacterC
         CharacterCreationStatus.DuplicateName => Results.Conflict(new { error = "character_name_taken", message = "That character name is already taken on this realm." }),
         CharacterCreationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_request", messages = result.Errors }),
         _ => Results.Problem("The character could not be created.")
+    };
+});
+
+app.MapGet("/api/accounts/{accountId:guid}/realms/{realmId:guid}/characters", async (Guid accountId, Guid realmId, CharacterQueryService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.ListForAccountRealmAsync(accountId, realmId, cancellationToken);
+
+    return result.Status switch
+    {
+        CharacterListStatus.Found => Results.Ok(result.Characters),
+        CharacterListStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_list_request", messages = result.Errors }),
+        _ => Results.Problem("Characters could not be loaded.")
     };
 });
 
