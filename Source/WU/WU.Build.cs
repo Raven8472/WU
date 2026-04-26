@@ -22,10 +22,14 @@ public class WU : ModuleRules
 			"SlateCore"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] {
+			"HTTP",
+			"Json"
+		});
 
 		PublicIncludePaths.AddRange(new string[] {
 			"WU",
+			"WU/Backend",
 			"WU/Variant_Combat",
 			"WU/Variant_Combat/AI",
 			"WU/Variant_Combat/Animation",
