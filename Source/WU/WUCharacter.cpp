@@ -10,9 +10,11 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "InputCoreTypes.h"
 #include "WU.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
@@ -20,6 +22,7 @@
 #include "DrawDebugHelpers.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
+#include "WUPlayerController.h"
 
 AWUCharacter::AWUCharacter()
 {
@@ -120,6 +123,9 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AWUCharacter::StartAttack);
 		//release
 		EnhancedInputComponent->BindAction(ReleaseAction, ETriggerEvent::Started, this, &AWUCharacter::RequestRelease);
+
+		PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUCharacter::TargetUnderCursorInput);
+		PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AWUCharacter::TargetNextInput);
 	}
 	else
 	{
@@ -137,6 +143,22 @@ void AWUCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D LookAxisVector = Value.Get<FVector2D>();
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
+}
+
+void AWUCharacter::TargetUnderCursorInput()
+{
+	if (AWUPlayerController* WUPC = Cast<AWUPlayerController>(GetController()))
+	{
+		WUPC->TargetUnderCursor();
+	}
+}
+
+void AWUCharacter::TargetNextInput()
+{
+	if (AWUPlayerController* WUPC = Cast<AWUPlayerController>(GetController()))
+	{
+		WUPC->TargetNextCharacter();
+	}
 }
 
 void AWUCharacter::DoMove(float Right, float Forward)
@@ -191,6 +213,30 @@ float AWUCharacter::GetCurrentHealth() const
 float AWUCharacter::GetMaxHealth() const
 {
 	return MaxHealth;
+}
+
+FText AWUCharacter::GetDisplayName() const
+{
+	if (const APlayerState* CurrentPlayerState = GetPlayerState())
+	{
+		const FString PlayerName = CurrentPlayerState->GetPlayerName();
+		if (!PlayerName.IsEmpty())
+		{
+			return FText::FromString(PlayerName);
+		}
+	}
+
+	if (!DisplayName.IsEmpty())
+	{
+		return DisplayName;
+	}
+
+	return FText::FromString(GetName());
+}
+
+UTexture2D* AWUCharacter::GetPortraitTexture() const
+{
+	return PortraitTexture;
 }
 
 bool AWUCharacter::IsDead() const
@@ -311,7 +357,7 @@ void AWUCharacter::PerformAttackTrace()
 
 		if (HitCharacter && HitCharacter != this)
 		{
-			const bool bDamageApplied = HitCharacter->ApplyDamage(CalculateDamage());
+			const bool bDamageApplied = HitCharacter->ApplyDamage(CalculateDamage(), this);
 
 			if (GEngine)
 			{
@@ -330,7 +376,7 @@ void AWUCharacter::PerformAttackTrace()
 	}
 }
 
-bool AWUCharacter::ApplyDamage(float Amount)
+bool AWUCharacter::ApplyDamage(float Amount, AWUCharacter* DamageCauser)
 {
 	if (!HasAuthority())
 	{
@@ -344,6 +390,19 @@ bool AWUCharacter::ApplyDamage(float Amount)
 
 	Health -= Amount;
 	Health = FMath::Max(Health, 0.0f);
+
+	if (DamageCauser)
+	{
+		if (AWUPlayerController* AttackerPC = Cast<AWUPlayerController>(DamageCauser->GetController()))
+		{
+			AttackerPC->AutoTargetDamagedCharacter(this);
+		}
+
+		if (AWUPlayerController* VictimPC = Cast<AWUPlayerController>(GetController()))
+		{
+			VictimPC->AutoTargetDamagedCharacter(DamageCauser);
+		}
+	}
 
 	if (GEngine)
 	{
@@ -549,6 +608,20 @@ void AWUCharacter::Client_SetInputMode_Implementation(bool bShowCursor)
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
+		return;
+	}
+
+	if (AWUPlayerController* WUPC = Cast<AWUPlayerController>(PC))
+	{
+		if (bShowCursor)
+		{
+			WUPC->ApplyUIInputMode();
+		}
+		else
+		{
+			WUPC->ApplyGameplayInputMode();
+		}
+
 		return;
 	}
 

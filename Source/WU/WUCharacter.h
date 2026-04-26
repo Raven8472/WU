@@ -11,6 +11,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UTexture2D;
 class UUserWidget;
 class AActor;
 struct FInputActionValue;
@@ -83,6 +84,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Death")
 	TSubclassOf<AActor> CorpseMarkerClass;
 
+	/** Optional display name used by HUD frames when this character is targeted */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD")
+	FText DisplayName;
+
+	/** Optional portrait texture used by HUD frames when this character is targeted */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD")
+	TObjectPtr<UTexture2D> PortraitTexture;
+
 public:
 
 	/** Constructor */
@@ -127,7 +136,7 @@ public:
 	void PerformAttackTrace();
 
 	/** Applies damage on the server, returns true if damage was actually applied */
-	bool ApplyDamage(float Amount);
+	bool ApplyDamage(float Amount, AWUCharacter* DamageCauser = nullptr);
 
 	/** Calculates outgoing damage (placeholder for future stat system) */
 	float CalculateDamage() const;
@@ -143,6 +152,14 @@ public:
 	/** Returns the maximum health value for HUD usage */
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetMaxHealth() const;
+
+	/** Returns the display name used by HUD frames */
+	UFUNCTION(BlueprintPure, Category = "HUD")
+	FText GetDisplayName() const;
+
+	/** Returns the portrait texture used by HUD frames */
+	UFUNCTION(BlueprintPure, Category = "HUD")
+	UTexture2D* GetPortraitTexture() const;
 
 	/** Returns true if the character is dead */
 	UFUNCTION(BlueprintPure, Category = "Death")
@@ -200,6 +217,12 @@ protected:
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+
+	/** Fallback target-select input routed through the possessed pawn input component */
+	void TargetUnderCursorInput();
+
+	/** Fallback target-cycle input routed through the possessed pawn input component */
+	void TargetNextInput();
 
 public:
 

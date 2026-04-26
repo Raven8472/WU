@@ -2,6 +2,7 @@
 
 #include "UI/WUPlayerHUDWidget.h"
 #include "WUCharacter.h"
+#include "WUPlayerController.h"
 #include "GameFramework/PlayerController.h"
 
 AWUCharacter* UWUPlayerHUDWidget::GetWUCharacter() const
@@ -12,6 +13,11 @@ AWUCharacter* UWUPlayerHUDWidget::GetWUCharacter() const
 	}
 
 	return nullptr;
+}
+
+AWUPlayerController* UWUPlayerHUDWidget::GetWUPlayerController() const
+{
+	return Cast<AWUPlayerController>(GetOwningPlayer());
 }
 
 float UWUPlayerHUDWidget::GetHealthPercent() const
@@ -87,4 +93,69 @@ FText UWUPlayerHUDWidget::GetDeathPromptText() const
 	}
 
 	return FText::GetEmpty();
+}
+
+AWUCharacter* UWUPlayerHUDWidget::GetTargetCharacter() const
+{
+	if (const AWUPlayerController* PC = GetWUPlayerController())
+	{
+		return PC->GetCurrentTarget();
+	}
+
+	return nullptr;
+}
+
+bool UWUPlayerHUDWidget::HasTarget() const
+{
+	return GetTargetCharacter() != nullptr;
+}
+
+float UWUPlayerHUDWidget::GetTargetHealthPercent() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return Target->GetHealthPercent();
+	}
+
+	return 0.0f;
+}
+
+int32 UWUPlayerHUDWidget::GetTargetHealthRounded() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return FMath::RoundToInt(Target->GetCurrentHealth());
+	}
+
+	return 0;
+}
+
+int32 UWUPlayerHUDWidget::GetTargetMaxHealthRounded() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return FMath::RoundToInt(Target->GetMaxHealth());
+	}
+
+	return 0;
+}
+
+FText UWUPlayerHUDWidget::GetTargetDisplayName() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return Target->GetDisplayName();
+	}
+
+	return FText::GetEmpty();
+}
+
+UTexture2D* UWUPlayerHUDWidget::GetTargetPortraitTexture() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return Target->GetPortraitTexture();
+	}
+
+	return nullptr;
 }
