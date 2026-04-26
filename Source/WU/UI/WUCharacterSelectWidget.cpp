@@ -6,6 +6,7 @@
 #include "ImageUtils.h"
 #include "Misc/Paths.h"
 #include "Styling/CoreStyle.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -29,6 +30,12 @@ UWUCharacterSelectWidget::UWUCharacterSelectWidget(const FObjectInitializer& Obj
 {
 	SetIsFocusable(true);
 	StatusText = LOCTEXT("SelectReady", "Select a character");
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> LoginBackgroundAsset(TEXT("/Game/UI/Login/Login_Background.Login_Background"));
+	if (LoginBackgroundAsset.Succeeded())
+	{
+		BackgroundTexture = LoginBackgroundAsset.Object;
+	}
 }
 
 void UWUCharacterSelectWidget::NativeConstruct()
