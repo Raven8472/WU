@@ -157,6 +157,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	FText GetDisplayName() const;
 
+	/** Sets the display name used by HUD frames */
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	void SetDisplayName(const FText& NewDisplayName);
+
 	/** Returns the portrait texture used by HUD frames */
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	UTexture2D* GetPortraitTexture() const;

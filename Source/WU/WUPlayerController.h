@@ -297,6 +297,12 @@ protected:
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
 
+	/** Applies selected character identity after server-side possession. */
+	virtual void OnPossess(APawn* InPawn) override;
+
+	/** Applies selected character identity after client-side possession ack. */
+	virtual void AcknowledgePossession(APawn* P) override;
+
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
 
@@ -336,6 +342,9 @@ protected:
 	/** Returns the display name used for outgoing chat. */
 	FString GetChatDisplayName() const;
 
+	/** Applies the selected login character to this gameplay controller/pawn. */
+	void ApplySelectedCharacterSessionContext();
+
 	/** Server-side player chat entry point. */
 	UFUNCTION(Server, Reliable)
 	void Server_SendChatMessage(const FString& Message);
@@ -359,5 +368,6 @@ protected:
 private:
 
 	float LastChatMessageServerTime = -1000.0f;
+	FString AppliedSessionCharacterId;
 
 };

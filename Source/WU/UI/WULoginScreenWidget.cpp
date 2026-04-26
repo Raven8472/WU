@@ -19,8 +19,8 @@
 
 namespace
 {
-	const FLinearColor PanelTint(0.015f, 0.012f, 0.01f, 0.78f);
-	const FLinearColor GoldText(0.96f, 0.84f, 0.58f, 1.0f);
+	const FLinearColor LoginPanelTint(0.015f, 0.012f, 0.01f, 0.78f);
+	const FLinearColor LoginGoldText(0.96f, 0.84f, 0.58f, 1.0f);
 }
 
 UWULoginScreenWidget::UWULoginScreenWidget(const FObjectInitializer& ObjectInitializer)
@@ -70,7 +70,7 @@ TSharedRef<SWidget> UWULoginScreenWidget::RebuildWidget()
 	BackgroundBrush.ImageSize = FVector2D(1920.0f, 1080.0f);
 
 	PanelBrush.DrawAs = ESlateBrushDrawType::Box;
-	PanelBrush.TintColor = FSlateColor(PanelTint);
+	PanelBrush.TintColor = FSlateColor(LoginPanelTint);
 
 	return SNew(SOverlay)
 		+ SOverlay::Slot()
@@ -99,7 +99,7 @@ TSharedRef<SWidget> UWULoginScreenWidget::RebuildWidget()
 						SNew(STextBlock)
 						.Text(LOCTEXT("GameTitle", "WU"))
 						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 44))
-						.ColorAndOpacity(GoldText)
+						.ColorAndOpacity(LoginGoldText)
 						.ShadowOffset(FVector2D(2.0f, 2.0f))
 						.ShadowColorAndOpacity(FLinearColor::Black)
 					]

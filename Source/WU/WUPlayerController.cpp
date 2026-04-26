@@ -2,6 +2,7 @@
 
 
 #include "WUPlayerController.h"
+#include "Backend/WUClientSessionSubsystem.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
@@ -189,9 +190,22 @@ void AWUPlayerController::BeginPlay()
 
 	if (IsLocalPlayerController())
 	{
+		ApplySelectedCharacterSessionContext();
 		ApplyGameplayInputMode();
 		ShowTargetingDebugMessage(TEXT("WU targeting ready"));
 	}
+}
+
+void AWUPlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+	ApplySelectedCharacterSessionContext();
+}
+
+void AWUPlayerController::AcknowledgePossession(APawn* P)
+{
+	Super::AcknowledgePossession(P);
+	ApplySelectedCharacterSessionContext();
 }
 
 void AWUPlayerController::SetupInputComponent()
@@ -832,6 +846,55 @@ FString AWUPlayerController::GetChatDisplayName() const
 	}
 
 	return TEXT("Player");
+}
+
+void AWUPlayerController::ApplySelectedCharacterSessionContext()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	const UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		return;
+	}
+
+	const FString& SelectedCharacterId = Session->GetSelectedCharacterId();
+	if (AppliedSessionCharacterId == SelectedCharacterId)
+	{
+		return;
+	}
+
+	const FWUBackendCharacterSummary* SelectedCharacter = nullptr;
+	for (const FWUBackendCharacterSummary& SessionCharacter : Session->GetCharacters())
+	{
+		if (SessionCharacter.CharacterId == SelectedCharacterId)
+		{
+			SelectedCharacter = &SessionCharacter;
+			break;
+		}
+	}
+
+	if (!SelectedCharacter)
+	{
+		return;
+	}
+
+	if (PlayerState)
+	{
+		PlayerState->SetPlayerName(SelectedCharacter->Name);
+	}
+
+	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
+	{
+		WUCharacter->SetDisplayName(FText::FromString(SelectedCharacter->Name));
+	}
+
+	AppliedSessionCharacterId = SelectedCharacterId;
+	ShowTargetingDebugMessage(FString::Printf(TEXT("Entered as %s"), *SelectedCharacter->Name), FColor::Green);
 }
 
 void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message)

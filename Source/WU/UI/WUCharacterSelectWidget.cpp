@@ -24,8 +24,8 @@
 
 namespace
 {
-	const FLinearColor PanelTint(0.015f, 0.012f, 0.01f, 0.78f);
-	const FLinearColor GoldText(0.96f, 0.84f, 0.58f, 1.0f);
+	const FLinearColor CharacterSelectPanelTint(0.015f, 0.012f, 0.01f, 0.78f);
+	const FLinearColor CharacterSelectGoldText(0.96f, 0.84f, 0.58f, 1.0f);
 }
 
 UWUCharacterSelectWidget::UWUCharacterSelectWidget(const FObjectInitializer& ObjectInitializer)
@@ -82,7 +82,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 	BackgroundBrush.ImageSize = FVector2D(1920.0f, 1080.0f);
 
 	PanelBrush.DrawAs = ESlateBrushDrawType::Box;
-	PanelBrush.TintColor = FSlateColor(PanelTint);
+	PanelBrush.TintColor = FSlateColor(CharacterSelectPanelTint);
 
 	PreviewBrush.SetResourceObject(ResolvePreviewTexture());
 	PreviewBrush.DrawAs = ESlateBrushDrawType::Image;
@@ -135,7 +135,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 						SNew(STextBlock)
 						.Text(LOCTEXT("CharacterSelectTitle", "Character Select"))
 						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 30))
-						.ColorAndOpacity(GoldText)
+						.ColorAndOpacity(CharacterSelectGoldText)
 						.ShadowOffset(FVector2D(2.0f, 2.0f))
 						.ShadowColorAndOpacity(FLinearColor::Black)
 					]
@@ -413,7 +413,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterRow(const FWUBacken
 					FText::AsNumber(Character.Level),
 					FText::FromString(WUCharacterCreation::RaceToString(Character.Race))))
 				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-				.ColorAndOpacity(GoldText)
+				.ColorAndOpacity(CharacterSelectGoldText)
 			]
 
 			+ SHorizontalBox::Slot()

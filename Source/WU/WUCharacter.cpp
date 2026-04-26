@@ -234,6 +234,11 @@ FText AWUCharacter::GetDisplayName() const
 	return FText::FromString(GetName());
 }
 
+void AWUCharacter::SetDisplayName(const FText& NewDisplayName)
+{
+	DisplayName = NewDisplayName;
+}
+
 UTexture2D* AWUCharacter::GetPortraitTexture() const
 {
 	return PortraitTexture;
