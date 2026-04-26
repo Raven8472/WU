@@ -235,10 +235,27 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 				+ SVerticalBox::Slot()
 				.AutoHeight()
 				[
-					CreateButton(LOCTEXT("CreateCharacter", "Create Character"), [this]()
-					{
-						return HandleCreateClicked();
-					})
+					SNew(SHorizontalBox)
+
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+					[
+						CreateButton(LOCTEXT("Cancel", "Cancel"), [this]()
+						{
+							HideCreator();
+							return FReply::Handled();
+						})
+					]
+
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+					.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+					[
+						CreateButton(LOCTEXT("CreateCharacter", "Create Character"), [this]()
+						{
+							return HandleCreateClicked();
+						})
+					]
 				]
 			]
 		];
@@ -327,6 +344,12 @@ void UWUCharacterCreatorWidget::RotatePreview(float YawDelta) const
 
 void UWUCharacterCreatorWidget::SubmitCreateRequest()
 {
+	if (OnCreateRequested.IsBound())
+	{
+		OnCreateRequested.Broadcast(CurrentRequest);
+		return;
+	}
+
 	if (AWUPlayerController* PC = Cast<AWUPlayerController>(GetOwningPlayer()))
 	{
 		PC->SubmitCharacterCreateRequest(CurrentRequest);

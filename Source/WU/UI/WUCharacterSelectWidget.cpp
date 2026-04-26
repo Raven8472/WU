@@ -2,6 +2,7 @@
 
 #include "UI/WUCharacterSelectWidget.h"
 #include "Backend/WUClientSessionSubsystem.h"
+#include "UI/WUCharacterCreatorWidget.h"
 #include "Engine/Texture2D.h"
 #include "ImageUtils.h"
 #include "Misc/Paths.h"
@@ -9,10 +10,10 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
-#include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/SNullWidget.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
@@ -30,6 +31,7 @@ UWUCharacterSelectWidget::UWUCharacterSelectWidget(const FObjectInitializer& Obj
 {
 	SetIsFocusable(true);
 	StatusText = LOCTEXT("SelectReady", "Select a character");
+	CharacterCreatorWidgetClass = UWUCharacterCreatorWidget::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<UTexture2D> LoginBackgroundAsset(TEXT("/Game/UI/Login/Login_Background.Login_Background"));
 	if (LoginBackgroundAsset.Succeeded())
@@ -53,6 +55,11 @@ void UWUCharacterSelectWidget::NativeConstruct()
 
 void UWUCharacterSelectWidget::NativeDestruct()
 {
+	if (CharacterCreatorWidget)
+	{
+		CharacterCreatorWidget->OnCreateRequested.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleCreatorCreateRequested);
+	}
+
 	if (UGameInstance* GameInstance = GetGameInstance())
 	{
 		if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
@@ -83,6 +90,14 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 		[
 			SNew(SImage)
 			.Image(&BackgroundBrush)
+		]
+
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Left)
+		.VAlign(VAlign_Center)
+		.Padding(FMargin(90.0f, 0.0f, 0.0f, 0.0f))
+		[
+			CreateCharacterCreatorPanel()
 		]
 
 		+ SOverlay::Slot()
@@ -124,15 +139,6 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 
 					+ SVerticalBox::Slot()
 					.AutoHeight()
-					.Padding(FMargin(0.0f, 0.0f, 0.0f, 8.0f))
-					[
-						SAssignNew(NameInputBox, SEditableTextBox)
-						.HintText(LOCTEXT("NameHint", "New character name"))
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
-					]
-
-					+ SVerticalBox::Slot()
-					.AutoHeight()
 					[
 						SNew(SHorizontalBox)
 
@@ -144,7 +150,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 							.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleCreateClicked)
 							[
 								SNew(STextBlock)
-								.Text(LOCTEXT("CreateCharacter", "Create"))
+								.Text(LOCTEXT("CreateCharacter", "Create New"))
 								.Justification(ETextJustify::Center)
 								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
 							]
@@ -192,9 +198,9 @@ void UWUCharacterSelectWidget::HandleCharactersLoaded(const TArray<FWUBackendCha
 void UWUCharacterSelectWidget::HandleCharacterCreated(const FWUBackendCharacterSummary& Character)
 {
 	StatusText = FText::Format(LOCTEXT("CharacterCreated", "{0} created"), FText::FromString(Character.Name));
-	if (NameInputBox)
+	if (CharacterCreatorWidget)
 	{
-		NameInputBox->SetText(FText::GetEmpty());
+		CharacterCreatorWidget->HideCreator();
 	}
 }
 
@@ -203,23 +209,33 @@ void UWUCharacterSelectWidget::HandleRequestFailed(const FString& ErrorMessage)
 	StatusText = FText::FromString(ErrorMessage);
 }
 
-FReply UWUCharacterSelectWidget::HandleCreateClicked()
+void UWUCharacterSelectWidget::HandleCreatorCreateRequested(const FWUCharacterCreateRequest& Request)
 {
-	if (!NameInputBox)
-	{
-		return FReply::Handled();
-	}
+	FWUCharacterCreateRequest SanitizedRequest = Request;
+	SanitizedRequest.CharacterName = Request.CharacterName.TrimStartAndEnd();
 
-	FWUCharacterCreateRequest Request;
-	Request.CharacterName = NameInputBox->GetText().ToString().TrimStartAndEnd();
-	Request.Race = EWUCharacterRace::Halfblood;
-	Request.Sex = EWUCharacterSex::Male;
+	if (SanitizedRequest.CharacterName.Len() < 3)
+	{
+		StatusText = LOCTEXT("NameTooShort", "Character name must be at least 3 characters.");
+		return;
+	}
 
 	if (UWUClientSessionSubsystem* Session = GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>())
 	{
 		StatusText = LOCTEXT("CreatingCharacter", "Creating character...");
-		Session->CreateCharacter(Request);
+		Session->CreateCharacter(SanitizedRequest);
 	}
+}
+
+FReply UWUCharacterSelectWidget::HandleCreateClicked()
+{
+	if (!CharacterCreatorWidget)
+	{
+		return FReply::Handled();
+	}
+
+	StatusText = LOCTEXT("CreatorOpen", "Choose a name and appearance.");
+	CharacterCreatorWidget->ShowCreator();
 
 	return FReply::Handled();
 }
@@ -250,6 +266,20 @@ FReply UWUCharacterSelectWidget::HandleSelectClicked(FString CharacterId)
 FText UWUCharacterSelectWidget::GetStatusText() const
 {
 	return StatusText;
+}
+
+TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterCreatorPanel()
+{
+	if (!CharacterCreatorWidget && CharacterCreatorWidgetClass && GetOwningPlayer())
+	{
+		CharacterCreatorWidget = CreateWidget<UWUCharacterCreatorWidget>(GetOwningPlayer(), CharacterCreatorWidgetClass);
+		if (CharacterCreatorWidget)
+		{
+			CharacterCreatorWidget->OnCreateRequested.AddUniqueDynamic(this, &UWUCharacterSelectWidget::HandleCreatorCreateRequested);
+		}
+	}
+
+	return CharacterCreatorWidget ? CharacterCreatorWidget->TakeWidget() : SNullWidget::NullWidget;
 }
 
 void UWUCharacterSelectWidget::RefreshCharacterRows()

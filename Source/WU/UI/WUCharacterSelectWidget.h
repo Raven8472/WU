@@ -9,8 +9,8 @@
 #include "Styling/SlateBrush.h"
 #include "WUCharacterSelectWidget.generated.h"
 
-class SEditableTextBox;
 class SVerticalBox;
+class UWUCharacterCreatorWidget;
 class UTexture2D;
 
 UCLASS(Blueprintable)
@@ -32,6 +32,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
 	FString BackgroundSourcePath = TEXT("UI/Login/Login_Background.png");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character Creation")
+	TSubclassOf<UWUCharacterCreatorWidget> CharacterCreatorWidgetClass;
+
 private:
 	UFUNCTION()
 	void HandleCharactersLoaded(const TArray<FWUBackendCharacterSummary>& LoadedCharacters);
@@ -42,11 +45,15 @@ private:
 	UFUNCTION()
 	void HandleRequestFailed(const FString& ErrorMessage);
 
+	UFUNCTION()
+	void HandleCreatorCreateRequested(const FWUCharacterCreateRequest& Request);
+
 	FReply HandleCreateClicked();
 	FReply HandleRefreshClicked();
 	FReply HandleSelectClicked(FString CharacterId);
 	FText GetStatusText() const;
 
+	TSharedRef<SWidget> CreateCharacterCreatorPanel();
 	void RefreshCharacterRows();
 	TSharedRef<SWidget> CreateCharacterRow(const FWUBackendCharacterSummary& Character);
 	UTexture2D* ResolveBackgroundTexture();
@@ -56,7 +63,9 @@ private:
 	FSlateBrush PanelBrush;
 	FText StatusText;
 	TSharedPtr<SVerticalBox> CharacterListBox;
-	TSharedPtr<SEditableTextBox> NameInputBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWUCharacterCreatorWidget> CharacterCreatorWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> LoadedBackgroundTexture;

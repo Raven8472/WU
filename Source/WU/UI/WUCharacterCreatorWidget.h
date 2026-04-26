@@ -11,6 +11,8 @@
 class SEditableTextBox;
 class UTexture2D;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUCharacterCreateRequestedSignature, const FWUCharacterCreateRequest&, Request);
+
 /**
  * Native character creator shell.
  * Builds a future-backend-safe FWUCharacterCreateRequest and drives the local preview actor.
@@ -23,6 +25,9 @@ class WU_API UWUCharacterCreatorWidget : public UUserWidget
 public:
 
 	UWUCharacterCreatorWidget(const FObjectInitializer& ObjectInitializer);
+
+	UPROPERTY(BlueprintAssignable, Category = "Character Creation")
+	FWUCharacterCreateRequestedSignature OnCreateRequested;
 
 	UFUNCTION(BlueprintCallable, Category = "Character Creation")
 	void ShowCreator();
