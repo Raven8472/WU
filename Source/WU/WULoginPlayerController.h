@@ -62,6 +62,9 @@ private:
 	UFUNCTION()
 	void ShowCharacterSelect();
 
+	UFUNCTION()
+	void EnterGame();
+
 	void ApplyMenuInputMode();
 	void SetupCharacterCreatorPreviewRig();
 	AWUCharacterCreatorPreviewActor* EnsureCharacterCreatorPreviewActor();

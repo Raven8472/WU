@@ -5,6 +5,7 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Kismet/GameplayStatics.h"
 #include "UI/WUCharacterSelectWidget.h"
 #include "UI/WULoginScreenWidget.h"
 
@@ -104,6 +105,10 @@ void AWULoginPlayerController::ShowCharacterSelect()
 	if (!CharacterSelectWidget)
 	{
 		CharacterSelectWidget = CreateWidget<UWUCharacterSelectWidget>(this, CharacterSelectWidgetClass);
+		if (CharacterSelectWidget)
+		{
+			CharacterSelectWidget->OnEnterGameRequested.AddDynamic(this, &AWULoginPlayerController::EnterGame);
+		}
 	}
 
 	if (CharacterSelectWidget && !CharacterSelectWidget->IsInViewport())
@@ -112,6 +117,28 @@ void AWULoginPlayerController::ShowCharacterSelect()
 	}
 
 	ApplyMenuInputMode();
+}
+
+void AWULoginPlayerController::EnterGame()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (LoginWidget)
+	{
+		LoginWidget->RemoveFromParent();
+		LoginWidget = nullptr;
+	}
+
+	if (CharacterSelectWidget)
+	{
+		CharacterSelectWidget->RemoveFromParent();
+		CharacterSelectWidget = nullptr;
+	}
+
+	UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/ThirdPerson/Lvl_WU_Prototype")));
 }
 
 void AWULoginPlayerController::ApplyMenuInputMode()

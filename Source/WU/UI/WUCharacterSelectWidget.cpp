@@ -153,6 +153,21 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 
 					+ SVerticalBox::Slot()
 					.AutoHeight()
+					.Padding(FMargin(0.0f, 0.0f, 0.0f, 8.0f))
+					[
+						SNew(SButton)
+						.ContentPadding(FMargin(12.0f, 9.0f))
+						.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleEnterGameClicked)
+						[
+							SNew(STextBlock)
+							.Text(LOCTEXT("EnterGame", "Enter Game"))
+							.Justification(ETextJustify::Center)
+							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+						]
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
 					[
 						SNew(SHorizontalBox)
 
@@ -274,6 +289,20 @@ FReply UWUCharacterSelectWidget::HandleSelectClicked(FString CharacterId)
 		RefreshCharacterRows();
 	}
 
+	return FReply::Handled();
+}
+
+FReply UWUCharacterSelectWidget::HandleEnterGameClicked()
+{
+	const UWUClientSessionSubsystem* Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		StatusText = LOCTEXT("SelectCharacterFirst", "Select a character before entering the game.");
+		return FReply::Handled();
+	}
+
+	StatusText = LOCTEXT("EnteringGame", "Entering game...");
+	OnEnterGameRequested.Broadcast();
 	return FReply::Handled();
 }
 

@@ -14,6 +14,8 @@ class UWUCharacterCreatorWidget;
 class UTexture;
 class UTexture2D;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUEnterGameRequestedSignature);
+
 UCLASS(Blueprintable)
 class WU_API UWUCharacterSelectWidget : public UUserWidget
 {
@@ -21,6 +23,9 @@ class WU_API UWUCharacterSelectWidget : public UUserWidget
 
 public:
 	UWUCharacterSelectWidget(const FObjectInitializer& ObjectInitializer);
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|Character Select")
+	FWUEnterGameRequestedSignature OnEnterGameRequested;
 
 protected:
 	virtual void NativeConstruct() override;
@@ -52,6 +57,7 @@ private:
 	FReply HandleCreateClicked();
 	FReply HandleRefreshClicked();
 	FReply HandleSelectClicked(FString CharacterId);
+	FReply HandleEnterGameClicked();
 	FText GetStatusText() const;
 
 	TSharedRef<SWidget> CreateCharacterCreatorPanel();
