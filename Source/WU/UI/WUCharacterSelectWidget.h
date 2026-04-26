@@ -11,6 +11,7 @@
 
 class SVerticalBox;
 class UWUCharacterCreatorWidget;
+class UTexture;
 class UTexture2D;
 
 UCLASS(Blueprintable)
@@ -54,13 +55,16 @@ private:
 	FText GetStatusText() const;
 
 	TSharedRef<SWidget> CreateCharacterCreatorPanel();
+	TSharedRef<SWidget> CreateCharacterPreviewPanel();
 	void RefreshCharacterRows();
 	TSharedRef<SWidget> CreateCharacterRow(const FWUBackendCharacterSummary& Character);
+	UTexture* ResolvePreviewTexture() const;
 	UTexture2D* ResolveBackgroundTexture();
 
 private:
 	FSlateBrush BackgroundBrush;
 	FSlateBrush PanelBrush;
+	FSlateBrush PreviewBrush;
 	FText StatusText;
 	TSharedPtr<SVerticalBox> CharacterListBox;
 

@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/WUCharacterCreatorWidget.h"
+#include "WULoginPlayerController.h"
 #include "WUPlayerController.h"
 #include "Engine/Texture2D.h"
 #include "Styling/CoreStyle.h"
@@ -299,6 +300,12 @@ void UWUCharacterCreatorWidget::RefreshPreview() const
 	if (AWUPlayerController* PC = Cast<AWUPlayerController>(GetOwningPlayer()))
 	{
 		PC->PreviewCharacterCreateRequest(CurrentRequest);
+		return;
+	}
+
+	if (AWULoginPlayerController* LoginPC = Cast<AWULoginPlayerController>(GetOwningPlayer()))
+	{
+		LoginPC->PreviewCharacterCreateRequest(CurrentRequest);
 	}
 }
 
@@ -339,6 +346,12 @@ void UWUCharacterCreatorWidget::RotatePreview(float YawDelta) const
 	if (AWUPlayerController* PC = Cast<AWUPlayerController>(GetOwningPlayer()))
 	{
 		PC->RotateCharacterCreatorPreview(YawDelta);
+		return;
+	}
+
+	if (AWULoginPlayerController* LoginPC = Cast<AWULoginPlayerController>(GetOwningPlayer()))
+	{
+		LoginPC->RotateCharacterCreatorPreview(YawDelta);
 	}
 }
 

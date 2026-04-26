@@ -2,8 +2,10 @@
 
 #include "UI/WUCharacterSelectWidget.h"
 #include "Backend/WUClientSessionSubsystem.h"
+#include "WULoginPlayerController.h"
 #include "UI/WUCharacterCreatorWidget.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "ImageUtils.h"
 #include "Misc/Paths.h"
 #include "Styling/CoreStyle.h"
@@ -82,6 +84,10 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 	PanelBrush.DrawAs = ESlateBrushDrawType::Box;
 	PanelBrush.TintColor = FSlateColor(PanelTint);
 
+	PreviewBrush.SetResourceObject(ResolvePreviewTexture());
+	PreviewBrush.DrawAs = ESlateBrushDrawType::Image;
+	PreviewBrush.ImageSize = FVector2D(360.0f, 540.0f);
+
 	TSharedRef<SVerticalBox> CharacterList = SNew(SVerticalBox);
 	CharacterListBox = CharacterList;
 
@@ -98,6 +104,14 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 		.Padding(FMargin(90.0f, 0.0f, 0.0f, 0.0f))
 		[
 			CreateCharacterCreatorPanel()
+		]
+
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Left)
+		.VAlign(VAlign_Center)
+		.Padding(FMargin(550.0f, 0.0f, 0.0f, 0.0f))
+		[
+			CreateCharacterPreviewPanel()
 		]
 
 		+ SOverlay::Slot()
@@ -282,6 +296,28 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterCreatorPanel()
 	return CharacterCreatorWidget ? CharacterCreatorWidget->TakeWidget() : SNullWidget::NullWidget;
 }
 
+TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterPreviewPanel()
+{
+	return SNew(SBox)
+		.WidthOverride(360.0f)
+		.HeightOverride(540.0f)
+		.Visibility_Lambda([this]()
+		{
+			return CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen() && ResolvePreviewTexture()
+				? EVisibility::HitTestInvisible
+				: EVisibility::Collapsed;
+		})
+		[
+			SNew(SBorder)
+			.BorderImage(&PanelBrush)
+			.Padding(FMargin(8.0f))
+			[
+				SNew(SImage)
+				.Image(&PreviewBrush)
+			]
+		];
+}
+
 void UWUCharacterSelectWidget::RefreshCharacterRows()
 {
 	if (!CharacterListBox)
@@ -364,6 +400,12 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterRow(const FWUBacken
 				]
 			]
 		];
+}
+
+UTexture* UWUCharacterSelectWidget::ResolvePreviewTexture() const
+{
+	const AWULoginPlayerController* LoginPC = Cast<AWULoginPlayerController>(GetOwningPlayer());
+	return LoginPC ? LoginPC->GetCharacterCreatorPreviewRenderTarget() : nullptr;
 }
 
 UTexture2D* UWUCharacterSelectWidget::ResolveBackgroundTexture()
