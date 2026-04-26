@@ -39,7 +39,16 @@ protected:
 	TObjectPtr<USkeletalMeshComponent> BodyMeshComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character Creation")
+	TObjectPtr<USkeletalMeshComponent> HeadMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character Creation")
 	TObjectPtr<USkeletalMeshComponent> HairMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character Creation")
+	TObjectPtr<USkeletalMeshComponent> BrowsMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Character Creation")
+	TObjectPtr<USkeletalMeshComponent> BeardMeshComponent;
 
 private:
 
@@ -47,8 +56,12 @@ private:
 	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
 
 	const TCHAR* GetBodyMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetHeadMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetHairMeshPath(EWUCharacterSex Sex, int32 HairStyleIndex) const;
+	const TCHAR* GetBrowsMeshPath(EWUCharacterSex Sex, int32 BrowStyleIndex) const;
+	const TCHAR* GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const;
 	const TCHAR* GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const;
+	const TCHAR* GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const;
 	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
 
 	int32 NormalizeIndex(int32 Index, int32 Count) const;

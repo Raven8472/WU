@@ -47,7 +47,7 @@ public:
 protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
-	FVector2D CreatorSize = FVector2D(430.0f, 520.0f);
+	FVector2D CreatorSize = FVector2D(430.0f, 650.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
 	TObjectPtr<UTexture2D> PanelTexture;
@@ -70,8 +70,11 @@ private:
 	void SetRace(EWUCharacterRace NewRace);
 	void SetSex(EWUCharacterSex NewSex);
 	void CycleSkinPreset(int32 Delta);
+	void CycleHeadPreset(int32 Delta);
 	void CycleHairStyle(int32 Delta);
 	void CycleHairColor(int32 Delta);
+	void CycleBrowStyle(int32 Delta);
+	void CycleBeardStyle(int32 Delta);
 	void RotatePreview(float YawDelta) const;
 	void SubmitCreateRequest();
 

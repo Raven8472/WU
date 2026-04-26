@@ -38,10 +38,19 @@ struct FWUCharacterCreateRequest
 	int32 SkinPresetIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
+	int32 HeadPresetIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
 	int32 HairStyleIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
 	int32 HairColorIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
+	int32 BrowStyleIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
+	int32 BeardStyleIndex = 0;
 };
 
 namespace WUCharacterCreation

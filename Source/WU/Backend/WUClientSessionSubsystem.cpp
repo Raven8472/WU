@@ -86,8 +86,11 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 
 	TSharedPtr<FJsonObject> AppearanceObject = MakeShared<FJsonObject>();
 	AppearanceObject->SetNumberField(TEXT("skinPresetIndex"), RequestData.SkinPresetIndex);
+	AppearanceObject->SetNumberField(TEXT("headPresetIndex"), RequestData.HeadPresetIndex);
 	AppearanceObject->SetNumberField(TEXT("hairStyleIndex"), RequestData.HairStyleIndex);
 	AppearanceObject->SetNumberField(TEXT("hairColorIndex"), RequestData.HairColorIndex);
+	AppearanceObject->SetNumberField(TEXT("browStyleIndex"), RequestData.BrowStyleIndex);
+	AppearanceObject->SetNumberField(TEXT("beardStyleIndex"), RequestData.BeardStyleIndex);
 	RootObject->SetObjectField(TEXT("appearance"), AppearanceObject);
 
 	FString Body;

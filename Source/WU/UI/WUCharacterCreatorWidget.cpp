@@ -174,6 +174,21 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
 				[
 					CreateStepperRow(
+						LOCTEXT("HeadPreset", "Head"),
+						TAttribute<FText>::CreateLambda([this]()
+						{
+							return FText::Format(LOCTEXT("HeadValue", "Preset {0}"), FText::AsNumber(CurrentRequest.HeadPresetIndex + 1));
+						}),
+						[this]() { CycleHeadPreset(-1); },
+						[this]() { CycleHeadPreset(1); }
+					)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+				[
+					CreateStepperRow(
 						LOCTEXT("HairStyle", "Hair"),
 						TAttribute<FText>::CreateLambda([this]()
 						{
@@ -196,6 +211,45 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 						}),
 						[this]() { CycleHairColor(-1); },
 						[this]() { CycleHairColor(1); }
+					)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+				[
+					CreateStepperRow(
+						LOCTEXT("Brows", "Brows"),
+						TAttribute<FText>::CreateLambda([this]()
+						{
+							return CurrentRequest.Sex == EWUCharacterSex::Male
+								? FText::Format(LOCTEXT("BrowsValue", "Style {0}"), FText::AsNumber(CurrentRequest.BrowStyleIndex + 1))
+								: LOCTEXT("BrowsUnavailable", "N/A");
+						}),
+						[this]() { CycleBrowStyle(-1); },
+						[this]() { CycleBrowStyle(1); }
+					)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+				[
+					CreateStepperRow(
+						LOCTEXT("Beard", "Beard"),
+						TAttribute<FText>::CreateLambda([this]()
+						{
+							if (CurrentRequest.Sex != EWUCharacterSex::Male)
+							{
+								return LOCTEXT("BeardUnavailable", "N/A");
+							}
+
+							return CurrentRequest.BeardStyleIndex == 0
+								? LOCTEXT("BeardNone", "None")
+								: FText::Format(LOCTEXT("BeardValue", "Style {0}"), FText::AsNumber(CurrentRequest.BeardStyleIndex));
+						}),
+						[this]() { CycleBeardStyle(-1); },
+						[this]() { CycleBeardStyle(1); }
 					)
 				]
 
@@ -319,12 +373,20 @@ void UWUCharacterCreatorWidget::SetSex(EWUCharacterSex NewSex)
 {
 	CurrentRequest.Sex = NewSex;
 	CurrentRequest.HairStyleIndex = 0;
+	CurrentRequest.BrowStyleIndex = 0;
+	CurrentRequest.BeardStyleIndex = 0;
 	RefreshPreview();
 }
 
 void UWUCharacterCreatorWidget::CycleSkinPreset(int32 Delta)
 {
 	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex + Delta, 0, 2);
+	RefreshPreview();
+}
+
+void UWUCharacterCreatorWidget::CycleHeadPreset(int32 Delta)
+{
+	CurrentRequest.HeadPresetIndex = FMath::Clamp(CurrentRequest.HeadPresetIndex + Delta, 0, 4);
 	RefreshPreview();
 }
 
@@ -338,6 +400,30 @@ void UWUCharacterCreatorWidget::CycleHairStyle(int32 Delta)
 void UWUCharacterCreatorWidget::CycleHairColor(int32 Delta)
 {
 	CurrentRequest.HairColorIndex = FMath::Clamp(CurrentRequest.HairColorIndex + Delta, 0, 3);
+	RefreshPreview();
+}
+
+void UWUCharacterCreatorWidget::CycleBrowStyle(int32 Delta)
+{
+	if (CurrentRequest.Sex != EWUCharacterSex::Male)
+	{
+		CurrentRequest.BrowStyleIndex = 0;
+		return;
+	}
+
+	CurrentRequest.BrowStyleIndex = FMath::Clamp(CurrentRequest.BrowStyleIndex + Delta, 0, 3);
+	RefreshPreview();
+}
+
+void UWUCharacterCreatorWidget::CycleBeardStyle(int32 Delta)
+{
+	if (CurrentRequest.Sex != EWUCharacterSex::Male)
+	{
+		CurrentRequest.BeardStyleIndex = 0;
+		return;
+	}
+
+	CurrentRequest.BeardStyleIndex = FMath::Clamp(CurrentRequest.BeardStyleIndex + Delta, 0, 6);
 	RefreshPreview();
 }
 
