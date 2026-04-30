@@ -238,6 +238,11 @@ void UWUCharacterSelectWidget::HandleRequestFailed(const FString& ErrorMessage)
 	StatusText = FText::FromString(ErrorMessage);
 }
 
+void UWUCharacterSelectWidget::SetStatusText(const FText& NewStatusText)
+{
+	StatusText = NewStatusText;
+}
+
 void UWUCharacterSelectWidget::HandleCreatorCreateRequested(const FWUCharacterCreateRequest& Request)
 {
 	FWUCharacterCreateRequest SanitizedRequest = Request;

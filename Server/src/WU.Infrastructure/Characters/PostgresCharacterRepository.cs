@@ -20,7 +20,15 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             await InsertAppearanceAsync(connection, transaction, characterId, command, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return new CharacterSummary(characterId, command.Name, command.Race, command.Sex, Level: 1, new CharacterLocation(0.0f, 0.0f, 0.0f));
+            const int startingLevel = 1;
+            return new CharacterSummary(
+                characterId,
+                command.Name,
+                command.Race,
+                command.Sex,
+                startingLevel,
+                CharacterStatRules.Calculate(command.Race, startingLevel),
+                new CharacterLocation(0.0f, 0.0f, 0.0f));
         }
         catch (PostgresException exception) when (exception.SqlState == UniqueViolationSqlState && IsCharacterNameConstraint(exception))
         {
@@ -135,12 +143,16 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
 
     private static CharacterSummary ReadCharacterSummary(NpgsqlDataReader reader)
     {
+        var race = (EWuCharacterRace)reader.GetInt16(2);
+        var level = reader.GetInt32(4);
+
         return new CharacterSummary(
             CharacterId: reader.GetGuid(0),
             Name: reader.GetString(1),
-            Race: (EWuCharacterRace)reader.GetInt16(2),
+            Race: race,
             Sex: (EWuCharacterSex)reader.GetInt16(3),
-            Level: reader.GetInt32(4),
+            Level: level,
+            Stats: CharacterStatRules.Calculate(race, level),
             Location: new CharacterLocation(
                 X: reader.GetFloat(5),
                 Y: reader.GetFloat(6),

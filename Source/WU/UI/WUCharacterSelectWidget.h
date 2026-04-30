@@ -27,6 +27,8 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "WU|Character Select")
 	FWUEnterGameRequestedSignature OnEnterGameRequested;
 
+	void SetStatusText(const FText& NewStatusText);
+
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;

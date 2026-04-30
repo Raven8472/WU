@@ -13,4 +13,19 @@ class WU_API AWULoginGameMode : public AGameModeBase
 
 public:
 	AWULoginGameMode();
+
+	void MarkPlayerReadyToEnterGame(APlayerController* PlayerController);
+
+protected:
+	UPROPERTY(EditAnywhere, Category = "WU|Login")
+	FString GameMapPath = TEXT("/Game/ThirdPerson/Lvl_WU_Prototype");
+
+private:
+	bool AreAllConnectedPlayersReady() const;
+	void TravelToGameMap();
+
+	UPROPERTY()
+	TSet<TObjectPtr<APlayerController>> ReadyPlayers;
+
+	bool bTravelRequested = false;
 };

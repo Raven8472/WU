@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CharacterStats/WUCharacterStats.h"
 #include "CharacterCreation/WUCharacterCreationTypes.h"
 #include "HttpFwd.h"
 #include "Subsystems/GameInstanceSubsystem.h"
@@ -78,6 +79,12 @@ struct FWUBackendCharacterSummary
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	int32 Level = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	FWUPrimaryStats PrimaryStats;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	FWUDerivedStats DerivedStats;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	FWUBackendCharacterLocation Location;

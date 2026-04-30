@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CharacterStats/WUCharacterStats.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "WUCharacter.generated.h"
@@ -101,13 +102,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	float BaseAttackDamage = 10.0f;
 
-	/** Maximum health used by the base prototype character */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	/** Maximum health calculated from Nerve */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Combat")
 	float MaxHealth = 100.0f;
 
 	/** Current health of the character (replicated from server) */
 	UPROPERTY(Replicated)
 	float Health;
+
+	/** Maximum Magic calculated from Wit */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Combat")
+	float MaxMagic = 150.0f;
+
+	/** Current Magic of the character (replicated from server) */
+	UPROPERTY(Replicated)
+	float Magic;
 
 	/** Whether the character is dead (replicated from server) */
 	UPROPERTY(ReplicatedUsing = OnRep_DeathState)
@@ -120,6 +129,22 @@ public:
 	/** Whether the character has released to graveyard (replicated from server) */
 	UPROPERTY(ReplicatedUsing = OnRep_DeathState)
 	bool bHasReleased;
+
+	/** Blood status currently stored in the character creation race field */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
+	EWUCharacterRace BloodStatus = EWUCharacterRace::Halfblood;
+
+	/** Character level used to derive primary stats */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats", meta = (ClampMin = 1, ClampMax = 80))
+	int32 CharacterLevel = 1;
+
+	/** Primary stats after human baseline, level growth, and blood-status modifiers */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
+	FWUPrimaryStats PrimaryStats;
+
+	/** Derived combat values calculated from primary stats */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
+	FWUDerivedStats DerivedStats;
 
 	/** Sets up which variables replicate */
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -141,6 +166,10 @@ public:
 	/** Calculates outgoing damage (placeholder for future stat system) */
 	float CalculateDamage() const;
 
+	/** Applies level and blood status, then recalculates primary and derived stats */
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void ApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel);
+
 	/** Returns health normalized to the max health for HUD usage */
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetHealthPercent() const;
@@ -152,6 +181,30 @@ public:
 	/** Returns the maximum health value for HUD usage */
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetMaxHealth() const;
+
+	/** Returns Magic normalized to the max Magic for HUD usage */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetMagicPercent() const;
+
+	/** Returns the current Magic value for HUD usage */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetCurrentMagic() const;
+
+	/** Returns the maximum Magic value for HUD usage */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetMaxMagic() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	EWUCharacterRace GetBloodStatus() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	int32 GetCharacterLevel() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	FWUPrimaryStats GetPrimaryStats() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	FWUDerivedStats GetDerivedStats() const;
 
 	/** Returns the display name used by HUD frames */
 	UFUNCTION(BlueprintPure, Category = "HUD")
@@ -206,8 +259,16 @@ public:
 	UFUNCTION()
 	void OnRep_DeathState();
 
+	UFUNCTION()
+	void OnRep_CharacterStats();
+
 	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
 	void UpdateDeathStateEffects();
+
+	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources);
+
+	UFUNCTION(Server, Reliable)
+	void ServerApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel);
 
 protected:
 

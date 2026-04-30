@@ -50,6 +50,36 @@ int32 UWUPlayerHUDWidget::GetMaxHealthRounded() const
 	return 0;
 }
 
+float UWUPlayerHUDWidget::GetMagicPercent() const
+{
+	if (const AWUCharacter* Character = GetWUCharacter())
+	{
+		return Character->GetMagicPercent();
+	}
+
+	return 0.0f;
+}
+
+int32 UWUPlayerHUDWidget::GetMagicRounded() const
+{
+	if (const AWUCharacter* Character = GetWUCharacter())
+	{
+		return FMath::RoundToInt(Character->GetCurrentMagic());
+	}
+
+	return 0;
+}
+
+int32 UWUPlayerHUDWidget::GetMaxMagicRounded() const
+{
+	if (const AWUCharacter* Character = GetWUCharacter())
+	{
+		return FMath::RoundToInt(Character->GetMaxMagic());
+	}
+
+	return 0;
+}
+
 bool UWUPlayerHUDWidget::IsPlayerDead() const
 {
 	if (const AWUCharacter* Character = GetWUCharacter())

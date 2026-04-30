@@ -53,7 +53,12 @@ AWUCharacter::AWUCharacter()
 
 	bReplicates = true;
 
+	PrimaryStats = WUCharacterStats::CalculatePrimaryStats(BloodStatus, CharacterLevel);
+	DerivedStats = WUCharacterStats::CalculateDerivedStats(PrimaryStats);
+	MaxHealth = DerivedStats.MaxHealth;
+	MaxMagic = DerivedStats.MaxMagic;
 	Health = MaxHealth;
+	Magic = MaxMagic;
 	bIsDead = false;
 	bHasReleased = false;
 	DeathWidget = nullptr;
@@ -65,9 +70,16 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AWUCharacter, Health);
+	DOREPLIFETIME(AWUCharacter, MaxHealth);
+	DOREPLIFETIME(AWUCharacter, Magic);
+	DOREPLIFETIME(AWUCharacter, MaxMagic);
 	DOREPLIFETIME(AWUCharacter, bIsDead);
 	DOREPLIFETIME(AWUCharacter, DeathLocation);
 	DOREPLIFETIME(AWUCharacter, bHasReleased);
+	DOREPLIFETIME(AWUCharacter, BloodStatus);
+	DOREPLIFETIME(AWUCharacter, CharacterLevel);
+	DOREPLIFETIME(AWUCharacter, PrimaryStats);
+	DOREPLIFETIME(AWUCharacter, DerivedStats);
 }
 
 void AWUCharacter::BeginPlay()
@@ -76,7 +88,7 @@ void AWUCharacter::BeginPlay()
 
 	if (HasAuthority())
 	{
-		Health = MaxHealth;
+		ApplyCharacterProgressionInternal(BloodStatus, CharacterLevel, true);
 		bIsDead = false;
 		bHasReleased = false;
 	}
@@ -197,7 +209,51 @@ void AWUCharacter::DoJumpEnd()
 
 float AWUCharacter::CalculateDamage() const
 {
-	return BaseAttackDamage;
+	return BaseAttackDamage * (1.0f + (DerivedStats.SpellPowerPercent * 0.01f));
+}
+
+void AWUCharacter::ApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel)
+{
+	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, true);
+
+	if (!HasAuthority())
+	{
+		ServerApplyCharacterProgression(NewBloodStatus, NewLevel);
+	}
+}
+
+void AWUCharacter::ServerApplyCharacterProgression_Implementation(EWUCharacterRace NewBloodStatus, int32 NewLevel)
+{
+	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, true);
+	ForceNetUpdate();
+}
+
+void AWUCharacter::ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources)
+{
+	BloodStatus = NewBloodStatus;
+	CharacterLevel = WUCharacterStats::ClampCharacterLevel(NewLevel);
+	PrimaryStats = WUCharacterStats::CalculatePrimaryStats(BloodStatus, CharacterLevel);
+	DerivedStats = WUCharacterStats::CalculateDerivedStats(PrimaryStats);
+
+	MaxHealth = DerivedStats.MaxHealth;
+	MaxMagic = DerivedStats.MaxMagic;
+
+	if (bResetResources)
+	{
+		Health = MaxHealth;
+		Magic = MaxMagic;
+	}
+	else
+	{
+		Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+		Magic = FMath::Clamp(Magic, 0.0f, MaxMagic);
+	}
+}
+
+void AWUCharacter::OnRep_CharacterStats()
+{
+	Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+	Magic = FMath::Clamp(Magic, 0.0f, MaxMagic);
 }
 
 float AWUCharacter::GetHealthPercent() const
@@ -213,6 +269,41 @@ float AWUCharacter::GetCurrentHealth() const
 float AWUCharacter::GetMaxHealth() const
 {
 	return MaxHealth;
+}
+
+float AWUCharacter::GetMagicPercent() const
+{
+	return MaxMagic > 0.0f ? FMath::Clamp(Magic / MaxMagic, 0.0f, 1.0f) : 0.0f;
+}
+
+float AWUCharacter::GetCurrentMagic() const
+{
+	return Magic;
+}
+
+float AWUCharacter::GetMaxMagic() const
+{
+	return MaxMagic;
+}
+
+EWUCharacterRace AWUCharacter::GetBloodStatus() const
+{
+	return BloodStatus;
+}
+
+int32 AWUCharacter::GetCharacterLevel() const
+{
+	return CharacterLevel;
+}
+
+FWUPrimaryStats AWUCharacter::GetPrimaryStats() const
+{
+	return PrimaryStats;
+}
+
+FWUDerivedStats AWUCharacter::GetDerivedStats() const
+{
+	return DerivedStats;
 }
 
 FText AWUCharacter::GetDisplayName() const

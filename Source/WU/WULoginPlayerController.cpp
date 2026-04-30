@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "UI/WUCharacterSelectWidget.h"
 #include "UI/WULoginScreenWidget.h"
+#include "WULoginGameMode.h"
 
 AWULoginPlayerController::AWULoginPlayerController()
 {
@@ -126,6 +127,46 @@ void AWULoginPlayerController::EnterGame()
 		return;
 	}
 
+	if (GetNetMode() == NM_Standalone)
+	{
+		RemoveMenuWidgets();
+		UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/ThirdPerson/Lvl_WU_Prototype")));
+		return;
+	}
+
+	if (CharacterSelectWidget)
+	{
+		CharacterSelectWidget->SetStatusText(FText::FromString(TEXT("Waiting for other players...")));
+	}
+
+	if (HasAuthority())
+	{
+		RequestEnterGameOnServer();
+	}
+	else
+	{
+		ServerRequestEnterGame();
+	}
+}
+
+void AWULoginPlayerController::ServerRequestEnterGame_Implementation()
+{
+	RequestEnterGameOnServer();
+}
+
+void AWULoginPlayerController::RequestEnterGameOnServer()
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (AWULoginGameMode* LoginGameMode = World->GetAuthGameMode<AWULoginGameMode>())
+		{
+			LoginGameMode->MarkPlayerReadyToEnterGame(this);
+		}
+	}
+}
+
+void AWULoginPlayerController::RemoveMenuWidgets()
+{
 	if (LoginWidget)
 	{
 		LoginWidget->RemoveFromParent();
@@ -137,8 +178,6 @@ void AWULoginPlayerController::EnterGame()
 		CharacterSelectWidget->RemoveFromParent();
 		CharacterSelectWidget = nullptr;
 	}
-
-	UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/ThirdPerson/Lvl_WU_Prototype")));
 }
 
 void AWULoginPlayerController::ApplyMenuInputMode()

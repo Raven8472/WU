@@ -65,6 +65,11 @@ private:
 	UFUNCTION()
 	void EnterGame();
 
+	UFUNCTION(Server, Reliable)
+	void ServerRequestEnterGame();
+
+	void RequestEnterGameOnServer();
+	void RemoveMenuWidgets();
 	void ApplyMenuInputMode();
 	void SetupCharacterCreatorPreviewRig();
 	AWUCharacterCreatorPreviewActor* EnsureCharacterCreatorPreviewActor();

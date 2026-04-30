@@ -548,6 +548,8 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 	}
 
 	OutCharacter.Level = FMath::Max(1, FMath::RoundToInt(LevelValue));
+	OutCharacter.PrimaryStats = WUCharacterStats::CalculatePrimaryStats(OutCharacter.Race, OutCharacter.Level);
+	OutCharacter.DerivedStats = WUCharacterStats::CalculateDerivedStats(OutCharacter.PrimaryStats);
 
 	const TSharedPtr<FJsonObject>* LocationObject = nullptr;
 	if (JsonObject->TryGetObjectField(TEXT("location"), LocationObject))

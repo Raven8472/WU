@@ -41,6 +41,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	int32 GetMaxHealthRounded() const;
 
+	/** Current Magic percentage normalized to 0..1 */
+	UFUNCTION(BlueprintPure, Category = "HUD")
+	float GetMagicPercent() const;
+
+	/** Current Magic as a rounded number */
+	UFUNCTION(BlueprintPure, Category = "HUD")
+	int32 GetMagicRounded() const;
+
+	/** Maximum Magic as a rounded number */
+	UFUNCTION(BlueprintPure, Category = "HUD")
+	int32 GetMaxMagicRounded() const;
+
 	/** True when the player is in the dead state */
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	bool IsPlayerDead() const;

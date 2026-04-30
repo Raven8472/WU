@@ -4,6 +4,7 @@
 #include "WUCharacter.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
 
 AWUGameMode::AWUGameMode()
 {
@@ -29,9 +30,10 @@ void AWUGameMode::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	AActor* StartSpot = UGameplayStatics::GetActorOfClass(this, APlayerStart::StaticClass());
+	TArray<AActor*> PlayerStarts;
+	UGameplayStatics::GetAllActorsOfClass(this, APlayerStart::StaticClass(), PlayerStarts);
 
-	if (!StartSpot)
+	if (PlayerStarts.IsEmpty())
 	{
 		return;
 	}
@@ -45,9 +47,22 @@ void AWUGameMode::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
+	PlayerStarts.Sort([](const AActor& Left, const AActor& Right)
+	{
+		return Left.GetName() < Right.GetName();
+	});
+
+	const int32 SpawnIndex = SpawnedPlayerCount++;
+	const int32 StartIndex = SpawnIndex % PlayerStarts.Num();
+	const AActor* StartSpot = PlayerStarts[StartIndex];
+	const FVector StartLocation = StartSpot->GetActorLocation();
+	const FVector FallbackOffset = PlayerStarts.Num() == 1
+		? StartSpot->GetActorRightVector() * (static_cast<float>(SpawnIndex) * FallbackSpawnSpacing)
+		: FVector::ZeroVector;
+
 	APawn* NewCharacter = GetWorld()->SpawnActor<APawn>(
 		PlayerPawnClass,
-		StartSpot->GetActorLocation(),
+		StartLocation + FallbackOffset,
 		StartSpot->GetActorRotation(),
 		SpawnParams
 	);
