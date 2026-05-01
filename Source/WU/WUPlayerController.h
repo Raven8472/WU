@@ -14,6 +14,7 @@ class AActor;
 class AWUCharacterCreatorPreviewActor;
 class AWUCharacter;
 class UWUCharacterCreatorWidget;
+class UWUCharacterPanelWidget;
 class UWUChatWidget;
 class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
@@ -123,6 +124,22 @@ protected:
 	/** Viewport size for the inventory shell widget */
 	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
 	FVector2D InventoryViewportSize = FVector2D(520.0f, 340.0f);
+
+	/** Native character panel widget to spawn for the local player */
+	UPROPERTY(EditAnywhere, Category = "UI|Character")
+	TSubclassOf<UWUCharacterPanelWidget> CharacterPanelWidgetClass;
+
+	/** Pointer to the native character panel widget */
+	UPROPERTY()
+	TObjectPtr<UWUCharacterPanelWidget> CharacterPanelWidget;
+
+	/** Viewport position for the character panel widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Character")
+	FVector2D CharacterPanelViewportPosition = FVector2D(0.0f, 0.0f);
+
+	/** Viewport size for the character panel widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Character")
+	FVector2D CharacterPanelViewportSize = FVector2D(560.0f, 520.0f);
 
 	/** Native character creator shell widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
@@ -268,6 +285,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void HideInventory();
 
+	/** Toggles the character panel window. */
+	UFUNCTION(BlueprintCallable, Category = "Character")
+	void ToggleCharacterPanel();
+
+	/** Shows the character panel window. */
+	UFUNCTION(BlueprintCallable, Category = "Character")
+	void ShowCharacterPanel();
+
+	/** Hides the character panel window. */
+	UFUNCTION(BlueprintCallable, Category = "Character")
+	void HideCharacterPanel();
+
 	/** Toggles the local character creator shell. */
 	UFUNCTION(BlueprintCallable, Category = "Character Creation")
 	void ToggleCharacterCreator();
@@ -326,6 +355,9 @@ protected:
 
 	/** Returns true while the inventory shell window is open. */
 	bool IsInventoryOpen() const;
+
+	/** Returns true while the character panel window is open. */
+	bool IsCharacterPanelOpen() const;
 
 	/** Returns true while the character creator shell window is open. */
 	bool IsCharacterCreatorOpen() const;

@@ -18,6 +18,7 @@
 #include "CharacterCreation/WUCharacterCreatorPreviewActor.h"
 #include "WUCharacter.h"
 #include "UI/WUCharacterCreatorWidget.h"
+#include "UI/WUCharacterPanelWidget.h"
 #include "UI/WUChatWidget.h"
 #include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
@@ -47,6 +48,7 @@ AWUPlayerController::AWUPlayerController()
 {
 	CharacterCreatorWidgetClass = UWUCharacterCreatorWidget::StaticClass();
 	CharacterCreatorPreviewActorClass = AWUCharacterCreatorPreviewActor::StaticClass();
+	CharacterPanelWidgetClass = UWUCharacterPanelWidget::StaticClass();
 	ChatWidgetClass = UWUChatWidget::StaticClass();
 	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
@@ -131,6 +133,22 @@ void AWUPlayerController::BeginPlay()
 		}
 	}
 
+	if (!CharacterPanelWidgetClass)
+	{
+		CharacterPanelWidgetClass = UWUCharacterPanelWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && CharacterPanelWidgetClass)
+	{
+		CharacterPanelWidget = CreateWidget<UWUCharacterPanelWidget>(this, CharacterPanelWidgetClass);
+
+		if (CharacterPanelWidget)
+		{
+			CharacterPanelWidget->AddToPlayerScreen(9);
+			ApplyViewportUnitFrameSlot(CharacterPanelWidget, CharacterPanelViewportSize, CharacterPanelViewportPosition, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f));
+		}
+	}
+
 	if (!CharacterCreatorWidgetClass)
 	{
 		CharacterCreatorWidgetClass = UWUCharacterCreatorWidget::StaticClass();
@@ -147,7 +165,7 @@ void AWUPlayerController::BeginPlay()
 
 		if (CharacterCreatorWidget)
 		{
-			CharacterCreatorWidget->AddToPlayerScreen(9);
+			CharacterCreatorWidget->AddToPlayerScreen(10);
 			ApplyViewportUnitFrameSlot(CharacterCreatorWidget, CharacterCreatorViewportSize, CharacterCreatorViewportPosition, FAnchors(0.0f, 0.0f), FVector2D(0.0f, 0.0f));
 		}
 	}
@@ -286,7 +304,8 @@ void AWUPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AWUPlayerController::CloseChatInput);
 	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
 	InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
-	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &AWUPlayerController::ToggleCharacterCreator);
+	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &AWUPlayerController::ToggleCharacterPanel);
+	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &AWUPlayerController::ToggleCharacterCreator);
 }
 
 bool AWUPlayerController::ShouldUseTouchControls() const
@@ -562,6 +581,12 @@ void AWUPlayerController::CloseChatInput()
 		return;
 	}
 
+	if (IsCharacterPanelOpen())
+	{
+		HideCharacterPanel();
+		return;
+	}
+
 	if (IsCharacterCreatorOpen())
 	{
 		HideCharacterCreator();
@@ -597,6 +622,11 @@ void AWUPlayerController::ToggleInventory()
 		return;
 	}
 
+	if (IsCharacterPanelOpen())
+	{
+		CharacterPanelWidget->HidePanel();
+	}
+
 	InventoryWidget->ToggleInventory();
 
 	if (InventoryWidget->IsInventoryOpen())
@@ -621,6 +651,11 @@ void AWUPlayerController::ShowInventory()
 	if (!IsLocalPlayerController() || !InventoryWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
 	{
 		return;
+	}
+
+	if (IsCharacterPanelOpen())
+	{
+		CharacterPanelWidget->HidePanel();
 	}
 
 	if (!InventoryWidget->IsInventoryOpen())
@@ -649,11 +684,85 @@ void AWUPlayerController::HideInventory()
 	ApplyGameplayInputMode();
 }
 
+void AWUPlayerController::ToggleCharacterPanel()
+{
+	if (!IsLocalPlayerController() || !CharacterPanelWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
+	{
+		return;
+	}
+
+	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
+	{
+		InventoryWidget->HideInventory();
+	}
+
+	CharacterPanelWidget->TogglePanel();
+
+	if (CharacterPanelWidget->IsPanelOpen())
+	{
+		bShowMouseCursor = true;
+		bEnableClickEvents = true;
+		bEnableMouseOverEvents = true;
+
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		SetInputMode(InputMode);
+	}
+	else
+	{
+		ApplyGameplayInputMode();
+	}
+}
+
+void AWUPlayerController::ShowCharacterPanel()
+{
+	if (!IsLocalPlayerController() || !CharacterPanelWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
+	{
+		return;
+	}
+
+	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
+	{
+		InventoryWidget->HideInventory();
+	}
+
+	if (!CharacterPanelWidget->IsPanelOpen())
+	{
+		CharacterPanelWidget->ShowPanel();
+	}
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+}
+
+void AWUPlayerController::HideCharacterPanel()
+{
+	if (!IsLocalPlayerController() || !CharacterPanelWidget)
+	{
+		return;
+	}
+
+	CharacterPanelWidget->HidePanel();
+	ApplyGameplayInputMode();
+}
+
 void AWUPlayerController::ToggleCharacterCreator()
 {
 	if (!IsLocalPlayerController() || !CharacterCreatorWidget || IsChatInputOpen())
 	{
 		return;
+	}
+
+	if (IsCharacterPanelOpen())
+	{
+		HideCharacterPanel();
 	}
 
 	if (CharacterCreatorWidget->IsCreatorOpen())
@@ -676,6 +785,11 @@ void AWUPlayerController::ShowCharacterCreator()
 	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
 	{
 		InventoryWidget->HideInventory();
+	}
+
+	if (CharacterPanelWidget && CharacterPanelWidget->IsPanelOpen())
+	{
+		CharacterPanelWidget->HidePanel();
 	}
 
 	SetIgnoreMoveInput(true);
@@ -768,6 +882,11 @@ bool AWUPlayerController::IsChatInputOpen() const
 bool AWUPlayerController::IsInventoryOpen() const
 {
 	return InventoryWidget && InventoryWidget->IsInventoryOpen();
+}
+
+bool AWUPlayerController::IsCharacterPanelOpen() const
+{
+	return CharacterPanelWidget && CharacterPanelWidget->IsPanelOpen();
 }
 
 bool AWUPlayerController::IsCharacterCreatorOpen() const
