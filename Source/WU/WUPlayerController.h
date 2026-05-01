@@ -78,7 +78,7 @@ protected:
 
 	/** Viewport size for the player unit frame */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
-	FVector2D PlayerFrameViewportSize = FVector2D(260.0f, 64.0f);
+	FVector2D PlayerFrameViewportSize = FVector2D(260.0f, 82.0f);
 
 	/** Hides the legacy Blueprint player frame when the native unit frame is active. */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
@@ -162,7 +162,7 @@ protected:
 
 	/** Viewport size for the enemy target frame */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
-	FVector2D TargetFrameViewportSize = FVector2D(260.0f, 64.0f);
+	FVector2D TargetFrameViewportSize = FVector2D(260.0f, 82.0f);
 
 	/** If true, the player will use UMG touch controls even if not playing on mobile platforms */
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")

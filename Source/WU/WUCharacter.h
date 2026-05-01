@@ -98,6 +98,8 @@ public:
 	/** Constructor */
 	AWUCharacter();
 
+	virtual void Tick(float DeltaSeconds) override;
+
 	/** Base attack damage (will later be modified by stats/gear) */
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	float BaseAttackDamage = 10.0f;
@@ -129,6 +131,14 @@ public:
 	/** Whether the character has released to graveyard (replicated from server) */
 	UPROPERTY(ReplicatedUsing = OnRep_DeathState)
 	bool bHasReleased;
+
+	/** True while recent damage or attacks keep the character in combat */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Combat")
+	bool bInCombat = false;
+
+	/** Seconds without dealing or receiving damage before leaving combat */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = 0.0f, Units = "s"))
+	float CombatTimeoutSeconds = 10.0f;
 
 	/** Blood status currently stored in the character creation race field */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
@@ -193,6 +203,9 @@ public:
 	/** Returns the maximum Magic value for HUD usage */
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetMaxMagic() const;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsInCombat() const;
 
 	UFUNCTION(BlueprintPure, Category = "Stats")
 	EWUCharacterRace GetBloodStatus() const;
@@ -265,6 +278,9 @@ public:
 	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
 	void UpdateDeathStateEffects();
 
+	void EnterCombatState();
+	void UpdateCombatState();
+	void RegenerateResources(float DeltaSeconds);
 	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources);
 
 	UFUNCTION(Server, Reliable)
@@ -273,6 +289,8 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+
+	float LastCombatEventTimeSeconds = -1000.0f;
 
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;

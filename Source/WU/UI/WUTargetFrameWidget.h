@@ -13,7 +13,7 @@ class UTexture2D;
 
 /**
  * Native enemy target frame for the HUD.
- * Shows the current target portrait, name, and health without requiring binary UMG asset edits.
+ * Shows the current target portrait, name, health, and Magic without requiring binary UMG asset edits.
  */
 UCLASS(Blueprintable)
 class WU_API UWUTargetFrameWidget : public UUserWidget
@@ -28,7 +28,7 @@ protected:
 
 	/** Overall target frame size in viewport pixels */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
-	FVector2D FrameSize = FVector2D(260.0f, 64.0f);
+	FVector2D FrameSize = FVector2D(260.0f, 82.0f);
 
 	/** Texture used for the outer portrait frame */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
@@ -42,6 +42,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
 	TObjectPtr<UTexture2D> HealthFillTexture;
 
+	/** Texture used for the Magic bar fill */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
+	TObjectPtr<UTexture2D> MagicFillTexture;
+
 	/** Texture used for the backing plate */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
 	TObjectPtr<UTexture2D> PanelTexture;
@@ -49,6 +53,10 @@ protected:
 	/** Tint applied to the target health fill */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Colors")
 	FLinearColor HealthFillTint = FLinearColor(1.0f, 0.18f, 0.12f, 1.0f);
+
+	/** Tint applied to the target Magic fill */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Colors")
+	FLinearColor MagicFillTint = FLinearColor(0.14f, 0.46f, 1.0f, 1.0f);
 
 	/** Tint applied to the fallback portrait background */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Colors")
@@ -67,8 +75,10 @@ protected:
 	bool HasTarget() const;
 	FText GetTargetNameText() const;
 	FText GetHealthText() const;
+	FText GetMagicText() const;
 	FText GetFallbackPortraitText() const;
 	TOptional<float> GetHealthPercent() const;
+	TOptional<float> GetMagicPercent() const;
 	const FSlateBrush* GetPortraitImageBrush() const;
 
 	virtual AWUCharacter* GetTargetCharacter() const;
@@ -79,9 +89,12 @@ protected:
 	FSlateBrush PortraitFrameBrush;
 	FSlateBrush BarFrameBrush;
 	FSlateBrush HealthFillBrush;
+	FSlateBrush MagicFillBrush;
 	FSlateBrush PanelBrush;
 	mutable FSlateBrush PortraitImageBrush;
 	FSlateBrush PortraitFallbackBrush;
 	FSlateBrush HealthBackgroundBrush;
+	FSlateBrush MagicBackgroundBrush;
 	FProgressBarStyle HealthBarStyle;
+	FProgressBarStyle MagicBarStyle;
 };

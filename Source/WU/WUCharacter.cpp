@@ -26,6 +26,8 @@
 
 AWUCharacter::AWUCharacter()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
 	bUseControllerRotationPitch = false;
@@ -76,6 +78,7 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AWUCharacter, bIsDead);
 	DOREPLIFETIME(AWUCharacter, DeathLocation);
 	DOREPLIFETIME(AWUCharacter, bHasReleased);
+	DOREPLIFETIME(AWUCharacter, bInCombat);
 	DOREPLIFETIME(AWUCharacter, BloodStatus);
 	DOREPLIFETIME(AWUCharacter, CharacterLevel);
 	DOREPLIFETIME(AWUCharacter, PrimaryStats);
@@ -98,6 +101,17 @@ void AWUCharacter::BeginPlay()
 	// Apply the initial alive/dead collision and movement state on spawn so
 	// freshly spawned players match the same rules used after later state changes.
 	UpdateDeathStateEffects();
+}
+
+void AWUCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (HasAuthority())
+	{
+		UpdateCombatState();
+		RegenerateResources(DeltaSeconds);
+	}
 }
 
 void AWUCharacter::OnRep_DeathState()
@@ -242,6 +256,7 @@ void AWUCharacter::ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodSt
 	{
 		Health = MaxHealth;
 		Magic = MaxMagic;
+		bInCombat = false;
 	}
 	else
 	{
@@ -284,6 +299,11 @@ float AWUCharacter::GetCurrentMagic() const
 float AWUCharacter::GetMaxMagic() const
 {
 	return MaxMagic;
+}
+
+bool AWUCharacter::IsInCombat() const
+{
+	return bInCombat;
 }
 
 EWUCharacterRace AWUCharacter::GetBloodStatus() const
@@ -405,6 +425,71 @@ void AWUCharacter::UpdateDeathStateEffects()
 	}
 }
 
+void AWUCharacter::EnterCombatState()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		LastCombatEventTimeSeconds = World->GetTimeSeconds();
+	}
+
+	bInCombat = true;
+}
+
+void AWUCharacter::UpdateCombatState()
+{
+	if (!bInCombat)
+	{
+		return;
+	}
+
+	if (bIsDead || Health <= 0.0f)
+	{
+		bInCombat = false;
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (World->GetTimeSeconds() - LastCombatEventTimeSeconds >= CombatTimeoutSeconds)
+	{
+		bInCombat = false;
+	}
+}
+
+void AWUCharacter::RegenerateResources(float DeltaSeconds)
+{
+	if (DeltaSeconds <= 0.0f || bIsDead || Health <= 0.0f)
+	{
+		return;
+	}
+
+	const float HealthRegenRate = bInCombat
+		? DerivedStats.HealthRegenInCombatPerSecond
+		: DerivedStats.HealthRegenOutOfCombatPerSecond;
+	const float MagicRegenRate = bInCombat
+		? DerivedStats.MagicRegenInCombatPerSecond
+		: DerivedStats.MagicRegenOutOfCombatPerSecond;
+
+	if (HealthRegenRate > 0.0f && Health < MaxHealth)
+	{
+		Health = FMath::Min(MaxHealth, Health + (HealthRegenRate * DeltaSeconds));
+	}
+
+	if (MagicRegenRate > 0.0f && Magic < MaxMagic)
+	{
+		Magic = FMath::Min(MaxMagic, Magic + (MagicRegenRate * DeltaSeconds));
+	}
+}
+
 void AWUCharacter::StartAttack()
 {
 	if (bIsDead)
@@ -453,12 +538,13 @@ void AWUCharacter::PerformAttackTrace()
 
 		if (HitCharacter && HitCharacter != this)
 		{
-			const bool bDamageApplied = HitCharacter->ApplyDamage(CalculateDamage(), this);
+			const float DamageAmount = CalculateDamage();
+			const bool bDamageApplied = HitCharacter->ApplyDamage(DamageAmount, this);
 
 			if (GEngine)
 			{
 				const FString DebugMessage = bDamageApplied
-					? FString::Printf(TEXT("Hit player and applied %.1f damage"), CalculateDamage())
+					? FString::Printf(TEXT("Hit player and applied %.1f damage"), DamageAmount)
 					: TEXT("Hit dead player - no damage");
 
 				GEngine->AddOnScreenDebugMessage(
@@ -487,8 +573,12 @@ bool AWUCharacter::ApplyDamage(float Amount, AWUCharacter* DamageCauser)
 	Health -= Amount;
 	Health = FMath::Max(Health, 0.0f);
 
+	EnterCombatState();
+
 	if (DamageCauser)
 	{
+		DamageCauser->EnterCombatState();
+
 		if (AWUPlayerController* AttackerPC = Cast<AWUPlayerController>(DamageCauser->GetController()))
 		{
 			AttackerPC->AutoTargetDamagedCharacter(this);
@@ -514,6 +604,7 @@ bool AWUCharacter::ApplyDamage(float Amount, AWUCharacter* DamageCauser)
 	{
 		bIsDead = true;
 		bHasReleased = false;
+		bInCombat = false;
 		DeathLocation = GetActorLocation();
 		UpdateDeathStateEffects();
 
@@ -674,8 +765,10 @@ void AWUCharacter::ReviveAtCorpse()
 	}
 
 	Health = MaxHealth;
+	Magic = MaxMagic;
 	bIsDead = false;
 	bHasReleased = false;
+	bInCombat = false;
 	UpdateDeathStateEffects();
 
 	SetActorLocation(DeathLocation, false, nullptr, ETeleportType::TeleportPhysics);

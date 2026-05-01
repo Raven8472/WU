@@ -433,10 +433,13 @@ void AWUPlayerController::TargetUnderCursor()
 	}
 
 	AWUCharacter* NearbyRayTarget = FindSelectableTargetNearRay(WorldLocation, WorldDirection, TargetTraceDistance, ClickTargetRayTolerance);
-	SetCurrentTarget(NearbyRayTarget);
-	if (!NearbyRayTarget)
+	if (NearbyRayTarget)
 	{
-		ShowTargetingDebugMessage(TEXT("Click target: no selectable target"), FColor::Yellow);
+		SetCurrentTarget(NearbyRayTarget);
+	}
+	else
+	{
+		ShowTargetingDebugMessage(TEXT("Click target: keeping current target"), FColor::Yellow);
 	}
 }
 
@@ -479,8 +482,7 @@ void AWUPlayerController::TargetNextCharacter()
 
 	if (Candidates.IsEmpty())
 	{
-		ClearCurrentTarget();
-		ShowTargetingDebugMessage(TEXT("Tab target: no candidates"), FColor::Yellow);
+		ShowTargetingDebugMessage(TEXT("Tab target: no candidates - keeping current target"), FColor::Yellow);
 		return;
 	}
 
@@ -563,6 +565,12 @@ void AWUPlayerController::CloseChatInput()
 	if (IsCharacterCreatorOpen())
 	{
 		HideCharacterCreator();
+		return;
+	}
+
+	if (HasCurrentTarget())
+	{
+		ClearCurrentTarget();
 		return;
 	}
 

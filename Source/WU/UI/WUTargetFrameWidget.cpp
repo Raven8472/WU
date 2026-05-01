@@ -40,6 +40,12 @@ UWUTargetFrameWidget::UWUTargetFrameWidget(const FObjectInitializer& ObjectIniti
 		HealthFillTexture = HealthFillAsset.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UTexture2D> MagicFillAsset(TEXT("/Game/UI/HUD/CorePack/T_HUD_Bar_Fill_Mana.T_HUD_Bar_Fill_Mana"));
+	if (MagicFillAsset.Succeeded())
+	{
+		MagicFillTexture = MagicFillAsset.Object;
+	}
+
 	static ConstructorHelpers::FObjectFinder<UTexture2D> PanelAsset(TEXT("/Game/UI/HUD/CorePack/T_HUD_Panel_Compact_9Slice.T_HUD_Panel_Compact_9Slice"));
 	if (PanelAsset.Succeeded())
 	{
@@ -51,14 +57,20 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 {
 	ConfigureImageBrush(PanelBrush, PanelTexture, FrameSize, FMargin(0.24f));
 	ConfigureImageBrush(PortraitFrameBrush, PortraitFrameTexture, FVector2D(58.0f, 58.0f));
-	ConfigureImageBrush(BarFrameBrush, BarFrameTexture, FVector2D(180.0f, 29.0f));
-	ConfigureImageBrush(HealthFillBrush, HealthFillTexture, FVector2D(165.0f, 12.0f));
+	ConfigureImageBrush(BarFrameBrush, BarFrameTexture, FVector2D(180.0f, 22.0f));
+	ConfigureImageBrush(HealthFillBrush, HealthFillTexture, FVector2D(165.0f, 9.0f));
+	ConfigureImageBrush(MagicFillBrush, MagicFillTexture, FVector2D(165.0f, 9.0f));
 	ConfigureColorBrush(PortraitFallbackBrush, PortraitBackgroundTint, FVector2D(44.0f, 44.0f));
-	ConfigureColorBrush(HealthBackgroundBrush, FLinearColor(0.045f, 0.018f, 0.015f, 0.96f), FVector2D(165.0f, 12.0f));
+	ConfigureColorBrush(HealthBackgroundBrush, FLinearColor(0.045f, 0.018f, 0.015f, 0.96f), FVector2D(165.0f, 9.0f));
+	ConfigureColorBrush(MagicBackgroundBrush, FLinearColor(0.012f, 0.022f, 0.055f, 0.96f), FVector2D(165.0f, 9.0f));
 
 	HealthBarStyle = FProgressBarStyle()
 		.SetBackgroundImage(HealthBackgroundBrush)
 		.SetFillImage(HealthFillBrush);
+
+	MagicBarStyle = FProgressBarStyle()
+		.SetBackgroundImage(MagicBackgroundBrush)
+		.SetFillImage(MagicFillBrush);
 
 	return SNew(SBox)
 		.WidthOverride(FrameSize.X)
@@ -78,7 +90,7 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 			]
 
 			+ SOverlay::Slot()
-			.Padding(FMargin(9.0f, 3.0f, 9.0f, 4.0f))
+			.Padding(FMargin(9.0f, 5.0f, 9.0f, 5.0f))
 			[
 				SNew(SHorizontalBox)
 
@@ -161,7 +173,7 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 
 					+ SVerticalBox::Slot()
 					.AutoHeight()
-					.Padding(FMargin(1.0f, 0.0f, 0.0f, 4.0f))
+					.Padding(FMargin(1.0f, 0.0f, 0.0f, 3.0f))
 					[
 						SNew(STextBlock)
 						.Text_Lambda([this]()
@@ -180,7 +192,7 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 					[
 						SNew(SBox)
 						.WidthOverride(180.0f)
-						.HeightOverride(29.0f)
+						.HeightOverride(22.0f)
 						[
 							SNew(SOverlay)
 
@@ -190,7 +202,7 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 							[
 								SNew(SBox)
 								.WidthOverride(165.0f)
-								.HeightOverride(12.0f)
+								.HeightOverride(9.0f)
 								[
 									SNew(SProgressBar)
 									.Style(&HealthBarStyle)
@@ -217,7 +229,58 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 								{
 									return GetHealthText();
 								})
-								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 9))
+								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 8))
+								.ColorAndOpacity(ValueColor)
+								.ShadowOffset(FVector2D(1.0f, 1.0f))
+								.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f))
+							]
+						]
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					.Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))
+					[
+						SNew(SBox)
+						.WidthOverride(180.0f)
+						.HeightOverride(22.0f)
+						[
+							SNew(SOverlay)
+
+							+ SOverlay::Slot()
+							.HAlign(HAlign_Center)
+							.VAlign(VAlign_Center)
+							[
+								SNew(SBox)
+								.WidthOverride(165.0f)
+								.HeightOverride(9.0f)
+								[
+									SNew(SProgressBar)
+									.Style(&MagicBarStyle)
+									.Percent_Lambda([this]()
+									{
+										return GetMagicPercent();
+									})
+									.FillColorAndOpacity(MagicFillTint)
+								]
+							]
+
+							+ SOverlay::Slot()
+							[
+								SNew(SImage)
+								.Image(&BarFrameBrush)
+							]
+
+							+ SOverlay::Slot()
+							.HAlign(HAlign_Center)
+							.VAlign(VAlign_Center)
+							[
+								SNew(STextBlock)
+								.Text_Lambda([this]()
+								{
+									return GetMagicText();
+								})
+								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 8))
 								.ColorAndOpacity(ValueColor)
 								.ShadowOffset(FVector2D(1.0f, 1.0f))
 								.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f))
@@ -268,6 +331,20 @@ FText UWUTargetFrameWidget::GetHealthText() const
 	return FText::GetEmpty();
 }
 
+FText UWUTargetFrameWidget::GetMagicText() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return FText::Format(
+			LOCTEXT("TargetMagicFormat", "{0} / {1}"),
+			FText::AsNumber(FMath::RoundToInt(Target->GetCurrentMagic())),
+			FText::AsNumber(FMath::RoundToInt(Target->GetMaxMagic()))
+		);
+	}
+
+	return FText::GetEmpty();
+}
+
 FText UWUTargetFrameWidget::GetFallbackPortraitText() const
 {
 	if (const AWUCharacter* Target = GetTargetCharacter())
@@ -287,6 +364,16 @@ TOptional<float> UWUTargetFrameWidget::GetHealthPercent() const
 	if (const AWUCharacter* Target = GetTargetCharacter())
 	{
 		return Target->GetHealthPercent();
+	}
+
+	return 0.0f;
+}
+
+TOptional<float> UWUTargetFrameWidget::GetMagicPercent() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return Target->GetMagicPercent();
 	}
 
 	return 0.0f;
