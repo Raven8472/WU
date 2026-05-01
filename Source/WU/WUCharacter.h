@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "CharacterStats/WUCharacterStats.h"
+#include "Inventory/WUInventoryTypes.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "WUCharacter.generated.h"
@@ -140,6 +141,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = 0.0f, Units = "s"))
 	float CombatTimeoutSeconds = 10.0f;
 
+	/** Total starter inventory slots. Kept aligned with the current inventory UI capacity. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory", meta = (ClampMin = 1))
+	int32 MaxInventorySlots = 60;
+
+	/** Bag inventory slots replicated from the server. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryChanged, Category = "Inventory")
+	TArray<FWUInventorySlot> InventorySlots;
+
+	/** Equipped item slots replicated from the server. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryChanged, Category = "Inventory")
+	TArray<FWUEquipmentSlotEntry> EquipmentSlots;
+
 	/** Blood status currently stored in the character creation race field */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
 	EWUCharacterRace BloodStatus = EWUCharacterRace::Halfblood;
@@ -206,6 +219,26 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	bool IsInCombat() const;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	TArray<FWUInventorySlot> GetInventorySlots() const;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	TArray<FWUEquipmentSlotEntry> GetEquipmentSlots() const;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool GetInventorySlot(int32 SlotIndex, FWUInventorySlot& OutSlot) const;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool GetEquippedItem(EWUEquipmentSlot EquipmentSlot, FWUInventoryItem& OutItem) const;
+
+	/** Equips the item in the requested bag slot, swapping with occupied equipment when needed. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool EquipInventorySlot(int32 SlotIndex);
+
+	/** Unequips the requested equipment slot into the first available bag slot. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool UnequipEquipmentSlot(EWUEquipmentSlot EquipmentSlot);
 
 	UFUNCTION(BlueprintPure, Category = "Stats")
 	EWUCharacterRace GetBloodStatus() const;
@@ -275,16 +308,30 @@ public:
 	UFUNCTION()
 	void OnRep_CharacterStats();
 
+	UFUNCTION()
+	void OnRep_InventoryChanged();
+
 	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
 	void UpdateDeathStateEffects();
 
 	void EnterCombatState();
 	void UpdateCombatState();
 	void RegenerateResources(float DeltaSeconds);
+	void InitializeInventoryStorage();
+	void SeedStarterInventory();
+	int32 FindEquipmentEntryIndex(EWUEquipmentSlot EquipmentSlot) const;
+	int32 FindFirstFreeInventorySlot() const;
+	bool AddItemToInventory(const FWUInventoryItem& Item);
 	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources);
 
 	UFUNCTION(Server, Reliable)
 	void ServerApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel);
+
+	UFUNCTION(Server, Reliable)
+	void ServerEquipInventorySlot(int32 SlotIndex);
+
+	UFUNCTION(Server, Reliable)
+	void ServerUnequipEquipmentSlot(EWUEquipmentSlot EquipmentSlot);
 
 protected:
 

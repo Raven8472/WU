@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/WUInventoryWidget.h"
+#include "InputCoreTypes.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
 #include "UObject/ConstructorHelpers.h"
@@ -11,6 +12,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WUCharacter.h"
 
 #define LOCTEXT_NAMESPACE "WUInventoryWidget"
 
@@ -183,7 +185,7 @@ int32 UWUInventoryWidget::GetUnlockedInventorySlotCount() const
 
 EVisibility UWUInventoryWidget::GetInventoryVisibility() const
 {
-	return bInventoryOpen ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed;
+	return bInventoryOpen ? EVisibility::Visible : EVisibility::Collapsed;
 }
 
 bool UWUInventoryWidget::IsBagSlotUnlocked(int32 BagSlotIndex) const
@@ -224,7 +226,7 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateBagSlot(int32 BagSlotIndex) const
 		];
 }
 
-TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex) const
+TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex)
 {
 	TSharedRef<SGridPanel> SlotGrid = SNew(SGridPanel);
 	const int32 Rows = SlotsPerBag / InventoryColumnsPerBag;
@@ -264,18 +266,128 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex) const
 		];
 }
 
-TSharedRef<SWidget> UWUInventoryWidget::CreateInventorySlot(int32 AbsoluteSlotIndex) const
+TSharedRef<SWidget> UWUInventoryWidget::CreateInventorySlot(int32 AbsoluteSlotIndex)
 {
-	(void)AbsoluteSlotIndex;
-
 	return SNew(SBox)
 		.WidthOverride(InventorySlotSize.X)
 		.HeightOverride(InventorySlotSize.Y)
 		[
-			SNew(SImage)
-			.Image(&SlotBrush)
-			.ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.88f))
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("NoBrush"))
+			.Padding(FMargin(0.0f))
+			.ToolTipText_Lambda([this, AbsoluteSlotIndex]()
+			{
+				return GetInventorySlotTooltipText(AbsoluteSlotIndex);
+			})
+			.OnMouseButtonDown_Lambda([this, AbsoluteSlotIndex](const FGeometry&, const FPointerEvent& PointerEvent)
+			{
+				if (PointerEvent.GetEffectingButton() == EKeys::LeftMouseButton
+					|| PointerEvent.GetEffectingButton() == EKeys::RightMouseButton)
+				{
+					return HandleInventorySlotClicked(AbsoluteSlotIndex);
+				}
+
+				return FReply::Unhandled();
+			})
+			[
+				SNew(SOverlay)
+
+				+ SOverlay::Slot()
+				[
+					SNew(SImage)
+					.Image(&SlotBrush)
+					.ColorAndOpacity_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotTint(AbsoluteSlotIndex);
+					})
+				]
+
+				+ SOverlay::Slot()
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotText(AbsoluteSlotIndex);
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+					.ColorAndOpacity_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotTextColor(AbsoluteSlotIndex);
+					})
+					.ShadowOffset(FVector2D(1.0f, 1.0f))
+					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f))
+				]
+			]
 		];
+}
+
+FText UWUInventoryWidget::GetInventorySlotText(int32 AbsoluteSlotIndex) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (!Character || !Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) || !InventorySlot.bHasItem)
+	{
+		return FText::GetEmpty();
+	}
+
+	return FText::FromString(WUInventory::GetShortItemLabel(InventorySlot.Item));
+}
+
+FText UWUInventoryWidget::GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (!Character || !Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) || !InventorySlot.bHasItem)
+	{
+		return LOCTEXT("EmptyInventorySlotTooltip", "Empty");
+	}
+
+	return FText::Format(
+		LOCTEXT("InventorySlotTooltip", "{0}\n{1}"),
+		FText::FromString(InventorySlot.Item.DisplayName),
+		WUInventory::EquipmentSlotToText(InventorySlot.Item.EquipmentSlot));
+}
+
+FSlateColor UWUInventoryWidget::GetInventorySlotTextColor(int32 AbsoluteSlotIndex) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (!Character || !Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) || !InventorySlot.bHasItem)
+	{
+		return MutedLabelColor;
+	}
+
+	return ValueColor;
+}
+
+FLinearColor UWUInventoryWidget::GetInventorySlotTint(int32 AbsoluteSlotIndex) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (!Character || !Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) || !InventorySlot.bHasItem)
+	{
+		return FLinearColor(1.0f, 1.0f, 1.0f, 0.88f);
+	}
+
+	FLinearColor Tint = InventorySlot.Item.ItemTint;
+	Tint.A = 0.92f;
+	return Tint;
+}
+
+FReply UWUInventoryWidget::HandleInventorySlotClicked(int32 AbsoluteSlotIndex)
+{
+	AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (Character && Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) && InventorySlot.bHasItem)
+	{
+		Character->EquipInventorySlot(AbsoluteSlotIndex);
+		InvalidateLayoutAndVolatility();
+		return FReply::Handled();
+	}
+
+	return FReply::Unhandled();
 }
 
 void UWUInventoryWidget::ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin)

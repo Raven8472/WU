@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Inventory/WUInventoryTypes.h"
 #include "Styling/SlateBrush.h"
 #include "WUCharacterPanelWidget.generated.h"
 
@@ -66,8 +67,13 @@ private:
 	FText GetCharacterSubtitleText() const;
 	FText GetPrimaryStatsText() const;
 	FText GetDerivedStatsText() const;
-	TSharedRef<SWidget> CreateEquipmentColumn(const TArray<FText>& SlotNames) const;
-	TSharedRef<SWidget> CreateEquipmentSlot(const FText& SlotName) const;
+	TSharedRef<SWidget> CreateEquipmentColumn(const TArray<EWUEquipmentSlot>& Slots);
+	TSharedRef<SWidget> CreateEquipmentSlot(EWUEquipmentSlot EquipmentSlot);
+	FText GetEquipmentSlotItemText(EWUEquipmentSlot EquipmentSlot) const;
+	FText GetEquipmentSlotTooltipText(EWUEquipmentSlot EquipmentSlot) const;
+	FSlateColor GetEquipmentSlotItemColor(EWUEquipmentSlot EquipmentSlot) const;
+	FLinearColor GetEquipmentSlotTint(EWUEquipmentSlot EquipmentSlot) const;
+	FReply HandleEquipmentSlotClicked(EWUEquipmentSlot EquipmentSlot);
 	void ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin = FMargin(0.0f));
 
 private:

@@ -2,6 +2,7 @@
 
 #include "UI/WUCharacterPanelWidget.h"
 #include "CharacterCreation/WUCharacterCreationTypes.h"
+#include "InputCoreTypes.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
 #include "UObject/ConstructorHelpers.h"
@@ -56,29 +57,29 @@ TSharedRef<SWidget> UWUCharacterPanelWidget::RebuildWidget()
 	ConfigureImageBrush(PanelBrush, PanelTexture, PanelSize, FMargin(0.24f));
 	ConfigureImageBrush(SlotBrush, SlotTexture, EquipmentSlotSize);
 
-	const TArray<FText> LeftSlots =
+	const TArray<EWUEquipmentSlot> LeftSlots =
 	{
-		LOCTEXT("HatSlot", "Hat"),
-		LOCTEXT("ShirtSlot", "Shirt"),
-		LOCTEXT("UndershirtSlot", "Undershirt"),
-		LOCTEXT("GlovesSlot", "Gloves"),
-		LOCTEXT("RingOneSlot", "Ring 1"),
-		LOCTEXT("RingTwoSlot", "Ring 2"),
-		LOCTEXT("BraceletOneSlot", "Bracelet 1"),
-		LOCTEXT("BraceletTwoSlot", "Bracelet 2")
+		EWUEquipmentSlot::Hat,
+		EWUEquipmentSlot::Shirt,
+		EWUEquipmentSlot::Undershirt,
+		EWUEquipmentSlot::Gloves,
+		EWUEquipmentSlot::Ring1,
+		EWUEquipmentSlot::Ring2,
+		EWUEquipmentSlot::Bracelet1,
+		EWUEquipmentSlot::Bracelet2
 	};
 
-	const TArray<FText> RightSlots =
+	const TArray<EWUEquipmentSlot> RightSlots =
 	{
-		LOCTEXT("ChestRobesSlot", "Chest / Robes"),
-		LOCTEXT("BeltSlot", "Belt"),
-		LOCTEXT("PantsSkirtSlot", "Pants / Skirt"),
-		LOCTEXT("ShoesSlot", "Shoes"),
-		LOCTEXT("EarringOneSlot", "Earring 1"),
-		LOCTEXT("EarringTwoSlot", "Earring 2"),
-		LOCTEXT("NicnakOneSlot", "Nicnak 1"),
-		LOCTEXT("NicnakTwoSlot", "Nicnak 2"),
-		LOCTEXT("WandSlot", "Wand")
+		EWUEquipmentSlot::ChestRobes,
+		EWUEquipmentSlot::Belt,
+		EWUEquipmentSlot::PantsSkirt,
+		EWUEquipmentSlot::Shoes,
+		EWUEquipmentSlot::Earring1,
+		EWUEquipmentSlot::Earring2,
+		EWUEquipmentSlot::Nicnak1,
+		EWUEquipmentSlot::Nicnak2,
+		EWUEquipmentSlot::Wand
 	};
 
 	return SNew(SBox)
@@ -215,7 +216,7 @@ bool UWUCharacterPanelWidget::IsPanelOpen() const
 
 EVisibility UWUCharacterPanelWidget::GetPanelVisibility() const
 {
-	return bPanelOpen ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed;
+	return bPanelOpen ? EVisibility::Visible : EVisibility::Collapsed;
 }
 
 FText UWUCharacterPanelWidget::GetCharacterNameText() const
@@ -282,57 +283,169 @@ FText UWUCharacterPanelWidget::GetDerivedStatsText() const
 		Stats.SpellPowerPercent));
 }
 
-TSharedRef<SWidget> UWUCharacterPanelWidget::CreateEquipmentColumn(const TArray<FText>& SlotNames) const
+TSharedRef<SWidget> UWUCharacterPanelWidget::CreateEquipmentColumn(const TArray<EWUEquipmentSlot>& Slots)
 {
 	TSharedRef<SVerticalBox> Column = SNew(SVerticalBox);
 
-	for (int32 SlotIndex = 0; SlotIndex < SlotNames.Num(); ++SlotIndex)
+	for (int32 SlotIndex = 0; SlotIndex < Slots.Num(); ++SlotIndex)
 	{
 		Column->AddSlot()
 		.AutoHeight()
 		.Padding(FMargin(0.0f, SlotIndex > 0 ? 7.0f : 0.0f, 0.0f, 0.0f))
 		[
-			CreateEquipmentSlot(SlotNames[SlotIndex])
+			CreateEquipmentSlot(Slots[SlotIndex])
 		];
 	}
 
 	return Column;
 }
 
-TSharedRef<SWidget> UWUCharacterPanelWidget::CreateEquipmentSlot(const FText& SlotName) const
+TSharedRef<SWidget> UWUCharacterPanelWidget::CreateEquipmentSlot(EWUEquipmentSlot EquipmentSlot)
 {
 	return SNew(SBox)
 		.WidthOverride(154.0f)
 		.HeightOverride(EquipmentSlotSize.Y)
 		[
-			SNew(SHorizontalBox)
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("NoBrush"))
+			.Padding(FMargin(0.0f))
+			.ToolTipText_Lambda([this, EquipmentSlot]()
+			{
+				return GetEquipmentSlotTooltipText(EquipmentSlot);
+			})
+			.OnMouseButtonDown_Lambda([this, EquipmentSlot](const FGeometry&, const FPointerEvent& PointerEvent)
+			{
+				if (PointerEvent.GetEffectingButton() == EKeys::LeftMouseButton
+					|| PointerEvent.GetEffectingButton() == EKeys::RightMouseButton)
+				{
+					return HandleEquipmentSlotClicked(EquipmentSlot);
+				}
 
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
+				return FReply::Unhandled();
+			})
 			[
-				SNew(SBox)
-				.WidthOverride(EquipmentSlotSize.X)
-				.HeightOverride(EquipmentSlotSize.Y)
+				SNew(SHorizontalBox)
+
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
 				[
-					SNew(SImage)
-					.Image(&SlotBrush)
-					.ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.88f))
+					SNew(SBox)
+					.WidthOverride(EquipmentSlotSize.X)
+					.HeightOverride(EquipmentSlotSize.Y)
+					[
+						SNew(SImage)
+						.Image(&SlotBrush)
+						.ColorAndOpacity_Lambda([this, EquipmentSlot]()
+						{
+							return GetEquipmentSlotTint(EquipmentSlot);
+						})
+					]
+				]
+
+				+ SHorizontalBox::Slot()
+				.FillWidth(1.0f)
+				.Padding(FMargin(7.0f, 0.0f, 0.0f, 0.0f))
+				.VAlign(VAlign_Center)
+				[
+					SNew(SVerticalBox)
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					[
+						SNew(STextBlock)
+						.Text(WUInventory::EquipmentSlotToText(EquipmentSlot))
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+						.ColorAndOpacity(LabelColor)
+						.ShadowOffset(FVector2D(1.0f, 1.0f))
+						.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					[
+						SNew(STextBlock)
+						.Text_Lambda([this, EquipmentSlot]()
+						{
+							return GetEquipmentSlotItemText(EquipmentSlot);
+						})
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+						.ColorAndOpacity_Lambda([this, EquipmentSlot]()
+						{
+							return GetEquipmentSlotItemColor(EquipmentSlot);
+						})
+						.ShadowOffset(FVector2D(1.0f, 1.0f))
+						.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+					]
 				]
 			]
-
-			+ SHorizontalBox::Slot()
-			.FillWidth(1.0f)
-			.Padding(FMargin(7.0f, 0.0f, 0.0f, 0.0f))
-			.VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text(SlotName)
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-				.ColorAndOpacity(LabelColor)
-				.ShadowOffset(FVector2D(1.0f, 1.0f))
-				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
-			]
 		];
+}
+
+FText UWUCharacterPanelWidget::GetEquipmentSlotItemText(EWUEquipmentSlot EquipmentSlot) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventoryItem EquippedItem;
+	if (!Character || !Character->GetEquippedItem(EquipmentSlot, EquippedItem))
+	{
+		return LOCTEXT("EmptyEquipmentSlot", "Empty");
+	}
+
+	return FText::FromString(EquippedItem.DisplayName);
+}
+
+FText UWUCharacterPanelWidget::GetEquipmentSlotTooltipText(EWUEquipmentSlot EquipmentSlot) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventoryItem EquippedItem;
+	if (!Character || !Character->GetEquippedItem(EquipmentSlot, EquippedItem))
+	{
+		return WUInventory::EquipmentSlotToText(EquipmentSlot);
+	}
+
+	return FText::Format(
+		LOCTEXT("EquipmentSlotTooltip", "{0}\n{1}"),
+		WUInventory::EquipmentSlotToText(EquipmentSlot),
+		FText::FromString(EquippedItem.DisplayName));
+}
+
+FSlateColor UWUCharacterPanelWidget::GetEquipmentSlotItemColor(EWUEquipmentSlot EquipmentSlot) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventoryItem EquippedItem;
+	if (!Character || !Character->GetEquippedItem(EquipmentSlot, EquippedItem))
+	{
+		return MutedLabelColor;
+	}
+
+	return ValueColor;
+}
+
+FLinearColor UWUCharacterPanelWidget::GetEquipmentSlotTint(EWUEquipmentSlot EquipmentSlot) const
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventoryItem EquippedItem;
+	if (!Character || !Character->GetEquippedItem(EquipmentSlot, EquippedItem))
+	{
+		return FLinearColor(1.0f, 1.0f, 1.0f, 0.88f);
+	}
+
+	FLinearColor Tint = EquippedItem.ItemTint;
+	Tint.A = 0.92f;
+	return Tint;
+}
+
+FReply UWUCharacterPanelWidget::HandleEquipmentSlotClicked(EWUEquipmentSlot EquipmentSlot)
+{
+	AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventoryItem EquippedItem;
+	if (Character && Character->GetEquippedItem(EquipmentSlot, EquippedItem))
+	{
+		Character->UnequipEquipmentSlot(EquipmentSlot);
+		InvalidateLayoutAndVolatility();
+		return FReply::Handled();
+	}
+
+	return FReply::Unhandled();
 }
 
 void UWUCharacterPanelWidget::ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin)

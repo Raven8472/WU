@@ -24,6 +24,20 @@
 #include "Kismet/GameplayStatics.h"
 #include "WUPlayerController.h"
 
+namespace
+{
+	FWUInventoryItem MakeStarterItem(FName ItemId, const TCHAR* DisplayName, EWUEquipmentSlot EquipmentSlot, const FLinearColor& ItemTint)
+	{
+		FWUInventoryItem Item;
+		Item.ItemId = ItemId;
+		Item.DisplayName = DisplayName;
+		Item.EquipmentSlot = EquipmentSlot;
+		Item.bEquippable = true;
+		Item.ItemTint = ItemTint;
+		return Item;
+	}
+}
+
 AWUCharacter::AWUCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -83,6 +97,8 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AWUCharacter, CharacterLevel);
 	DOREPLIFETIME(AWUCharacter, PrimaryStats);
 	DOREPLIFETIME(AWUCharacter, DerivedStats);
+	DOREPLIFETIME(AWUCharacter, InventorySlots);
+	DOREPLIFETIME(AWUCharacter, EquipmentSlots);
 }
 
 void AWUCharacter::BeginPlay()
@@ -94,6 +110,9 @@ void AWUCharacter::BeginPlay()
 		ApplyCharacterProgressionInternal(BloodStatus, CharacterLevel, true);
 		bIsDead = false;
 		bHasReleased = false;
+		InitializeInventoryStorage();
+		SeedStarterInventory();
+		ForceNetUpdate();
 	}
 
 	DeathWidget = nullptr;
@@ -271,6 +290,10 @@ void AWUCharacter::OnRep_CharacterStats()
 	Magic = FMath::Clamp(Magic, 0.0f, MaxMagic);
 }
 
+void AWUCharacter::OnRep_InventoryChanged()
+{
+}
+
 float AWUCharacter::GetHealthPercent() const
 {
 	return MaxHealth > 0.0f ? FMath::Clamp(Health / MaxHealth, 0.0f, 1.0f) : 0.0f;
@@ -304,6 +327,114 @@ float AWUCharacter::GetMaxMagic() const
 bool AWUCharacter::IsInCombat() const
 {
 	return bInCombat;
+}
+
+TArray<FWUInventorySlot> AWUCharacter::GetInventorySlots() const
+{
+	return InventorySlots;
+}
+
+TArray<FWUEquipmentSlotEntry> AWUCharacter::GetEquipmentSlots() const
+{
+	return EquipmentSlots;
+}
+
+bool AWUCharacter::GetInventorySlot(int32 SlotIndex, FWUInventorySlot& OutSlot) const
+{
+	if (!InventorySlots.IsValidIndex(SlotIndex))
+	{
+		OutSlot = FWUInventorySlot();
+		return false;
+	}
+
+	OutSlot = InventorySlots[SlotIndex];
+	return true;
+}
+
+bool AWUCharacter::GetEquippedItem(EWUEquipmentSlot EquipmentSlot, FWUInventoryItem& OutItem) const
+{
+	const int32 EquipmentIndex = FindEquipmentEntryIndex(EquipmentSlot);
+	if (!EquipmentSlots.IsValidIndex(EquipmentIndex) || !EquipmentSlots[EquipmentIndex].bHasItem)
+	{
+		OutItem = FWUInventoryItem();
+		return false;
+	}
+
+	OutItem = EquipmentSlots[EquipmentIndex].Item;
+	return true;
+}
+
+bool AWUCharacter::EquipInventorySlot(int32 SlotIndex)
+{
+	if (!HasAuthority())
+	{
+		ServerEquipInventorySlot(SlotIndex);
+		return true;
+	}
+
+	InitializeInventoryStorage();
+
+	if (!InventorySlots.IsValidIndex(SlotIndex) || !InventorySlots[SlotIndex].bHasItem)
+	{
+		return false;
+	}
+
+	const FWUInventoryItem ItemToEquip = InventorySlots[SlotIndex].Item;
+	if (!ItemToEquip.bEquippable)
+	{
+		return false;
+	}
+
+	const int32 EquipmentIndex = FindEquipmentEntryIndex(ItemToEquip.EquipmentSlot);
+	if (!EquipmentSlots.IsValidIndex(EquipmentIndex))
+	{
+		return false;
+	}
+
+	if (EquipmentSlots[EquipmentIndex].bHasItem)
+	{
+		InventorySlots[SlotIndex].Item = EquipmentSlots[EquipmentIndex].Item;
+		InventorySlots[SlotIndex].bHasItem = true;
+	}
+	else
+	{
+		InventorySlots[SlotIndex] = FWUInventorySlot();
+	}
+
+	EquipmentSlots[EquipmentIndex].Item = ItemToEquip;
+	EquipmentSlots[EquipmentIndex].bHasItem = true;
+	ForceNetUpdate();
+	return true;
+}
+
+bool AWUCharacter::UnequipEquipmentSlot(EWUEquipmentSlot EquipmentSlot)
+{
+	if (!HasAuthority())
+	{
+		ServerUnequipEquipmentSlot(EquipmentSlot);
+		return true;
+	}
+
+	InitializeInventoryStorage();
+
+	const int32 EquipmentIndex = FindEquipmentEntryIndex(EquipmentSlot);
+	if (!EquipmentSlots.IsValidIndex(EquipmentIndex) || !EquipmentSlots[EquipmentIndex].bHasItem)
+	{
+		return false;
+	}
+
+	const int32 FreeInventorySlot = FindFirstFreeInventorySlot();
+	if (!InventorySlots.IsValidIndex(FreeInventorySlot))
+	{
+		return false;
+	}
+
+	InventorySlots[FreeInventorySlot].Item = EquipmentSlots[EquipmentIndex].Item;
+	InventorySlots[FreeInventorySlot].bHasItem = true;
+	EquipmentSlots[EquipmentIndex].Item = FWUInventoryItem();
+	EquipmentSlots[EquipmentIndex].bHasItem = false;
+	ForceNetUpdate();
+	return true;
 }
 
 EWUCharacterRace AWUCharacter::GetBloodStatus() const
@@ -488,6 +619,118 @@ void AWUCharacter::RegenerateResources(float DeltaSeconds)
 	{
 		Magic = FMath::Min(MaxMagic, Magic + (MagicRegenRate * DeltaSeconds));
 	}
+}
+
+void AWUCharacter::InitializeInventoryStorage()
+{
+	if (MaxInventorySlots < 1)
+	{
+		MaxInventorySlots = 1;
+	}
+
+	if (InventorySlots.Num() != MaxInventorySlots)
+	{
+		InventorySlots.SetNum(MaxInventorySlots);
+	}
+
+	const TArray<EWUEquipmentSlot>& AllEquipmentSlots = WUInventory::GetAllEquipmentSlots();
+	for (EWUEquipmentSlot EquipmentSlot : AllEquipmentSlots)
+	{
+		if (FindEquipmentEntryIndex(EquipmentSlot) == INDEX_NONE)
+		{
+			FWUEquipmentSlotEntry Entry;
+			Entry.Slot = EquipmentSlot;
+			EquipmentSlots.Add(Entry);
+		}
+	}
+}
+
+void AWUCharacter::SeedStarterInventory()
+{
+	bool bHasAnyItem = false;
+	for (const FWUInventorySlot& InventorySlot : InventorySlots)
+	{
+		if (InventorySlot.bHasItem)
+		{
+			bHasAnyItem = true;
+			break;
+		}
+	}
+
+	if (!bHasAnyItem)
+	{
+		for (const FWUEquipmentSlotEntry& EquipmentEntry : EquipmentSlots)
+		{
+			if (EquipmentEntry.bHasItem)
+			{
+				bHasAnyItem = true;
+				break;
+			}
+		}
+	}
+
+	if (bHasAnyItem)
+	{
+		return;
+	}
+
+	AddItemToInventory(MakeStarterItem(TEXT("starter_wand"), TEXT("Holly Wand"), EWUEquipmentSlot::Wand, FLinearColor(0.75f, 0.55f, 0.28f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_robes"), TEXT("First-Year Robes"), EWUEquipmentSlot::ChestRobes, FLinearColor(0.18f, 0.25f, 0.36f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_shirt"), TEXT("Linen Shirt"), EWUEquipmentSlot::Shirt, FLinearColor(0.82f, 0.78f, 0.68f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_shoes"), TEXT("School Shoes"), EWUEquipmentSlot::Shoes, FLinearColor(0.22f, 0.18f, 0.14f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_hat"), TEXT("Wool Hat"), EWUEquipmentSlot::Hat, FLinearColor(0.32f, 0.27f, 0.22f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_ring"), TEXT("Copper Ring"), EWUEquipmentSlot::Ring1, FLinearColor(0.86f, 0.46f, 0.22f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_bracelet"), TEXT("Woven Bracelet"), EWUEquipmentSlot::Bracelet1, FLinearColor(0.40f, 0.58f, 0.34f, 1.0f)));
+	AddItemToInventory(MakeStarterItem(TEXT("starter_nicnak"), TEXT("Tiny Nicnak"), EWUEquipmentSlot::Nicnak1, FLinearColor(0.45f, 0.64f, 0.88f, 1.0f)));
+}
+
+int32 AWUCharacter::FindEquipmentEntryIndex(EWUEquipmentSlot EquipmentSlot) const
+{
+	for (int32 Index = 0; Index < EquipmentSlots.Num(); ++Index)
+	{
+		if (EquipmentSlots[Index].Slot == EquipmentSlot)
+		{
+			return Index;
+		}
+	}
+
+	return INDEX_NONE;
+}
+
+int32 AWUCharacter::FindFirstFreeInventorySlot() const
+{
+	for (int32 Index = 0; Index < InventorySlots.Num(); ++Index)
+	{
+		if (!InventorySlots[Index].bHasItem)
+		{
+			return Index;
+		}
+	}
+
+	return INDEX_NONE;
+}
+
+bool AWUCharacter::AddItemToInventory(const FWUInventoryItem& Item)
+{
+	const int32 FreeInventorySlot = FindFirstFreeInventorySlot();
+	if (!InventorySlots.IsValidIndex(FreeInventorySlot))
+	{
+		return false;
+	}
+
+	InventorySlots[FreeInventorySlot].Item = Item;
+	InventorySlots[FreeInventorySlot].bHasItem = true;
+	return true;
+}
+
+void AWUCharacter::ServerEquipInventorySlot_Implementation(int32 SlotIndex)
+{
+	EquipInventorySlot(SlotIndex);
+}
+
+void AWUCharacter::ServerUnequipEquipmentSlot_Implementation(EWUEquipmentSlot EquipmentSlot)
+{
+	UnequipEquipmentSlot(EquipmentSlot);
 }
 
 void AWUCharacter::StartAttack()

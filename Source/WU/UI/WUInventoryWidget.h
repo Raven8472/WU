@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Inventory/WUInventoryTypes.h"
 #include "Styling/SlateBrush.h"
 #include "WUInventoryWidget.generated.h"
 
@@ -72,6 +73,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Colors")
 	FSlateColor MutedLabelColor = FSlateColor(FLinearColor(0.48f, 0.45f, 0.38f, 1.0f));
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Colors")
+	FSlateColor ValueColor = FSlateColor(FLinearColor(0.90f, 0.92f, 0.96f, 1.0f));
+
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 
 private:
@@ -79,8 +83,13 @@ private:
 	EVisibility GetInventoryVisibility() const;
 	bool IsBagSlotUnlocked(int32 BagSlotIndex) const;
 	TSharedRef<SWidget> CreateBagSlot(int32 BagSlotIndex) const;
-	TSharedRef<SWidget> CreateBagSection(int32 BagIndex) const;
-	TSharedRef<SWidget> CreateInventorySlot(int32 AbsoluteSlotIndex) const;
+	TSharedRef<SWidget> CreateBagSection(int32 BagIndex);
+	TSharedRef<SWidget> CreateInventorySlot(int32 AbsoluteSlotIndex);
+	FText GetInventorySlotText(int32 AbsoluteSlotIndex) const;
+	FText GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) const;
+	FSlateColor GetInventorySlotTextColor(int32 AbsoluteSlotIndex) const;
+	FLinearColor GetInventorySlotTint(int32 AbsoluteSlotIndex) const;
+	FReply HandleInventorySlotClicked(int32 AbsoluteSlotIndex);
 
 	void ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin = FMargin(0.0f));
 
