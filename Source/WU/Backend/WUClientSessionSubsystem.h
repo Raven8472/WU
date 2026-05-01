@@ -78,6 +78,9 @@ struct FWUBackendCharacterSummary
 	EWUCharacterSex Sex = EWUCharacterSex::Male;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	FWUCharacterAppearance Appearance;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	int32 Level = 1;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")

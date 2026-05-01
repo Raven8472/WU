@@ -547,9 +547,35 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 		return false;
 	}
 
+	OutCharacter.Appearance.Sex = OutCharacter.Sex;
 	OutCharacter.Level = FMath::Max(1, FMath::RoundToInt(LevelValue));
 	OutCharacter.PrimaryStats = WUCharacterStats::CalculatePrimaryStats(OutCharacter.Race, OutCharacter.Level);
 	OutCharacter.DerivedStats = WUCharacterStats::CalculateDerivedStats(OutCharacter.PrimaryStats);
+
+	const TSharedPtr<FJsonObject>* AppearanceObject = nullptr;
+	if (JsonObject->TryGetObjectField(TEXT("appearance"), AppearanceObject) && AppearanceObject && AppearanceObject->IsValid())
+	{
+		double SkinPresetIndex = 0.0;
+		double HeadPresetIndex = 0.0;
+		double HairStyleIndex = 0.0;
+		double HairColorIndex = 0.0;
+		double BrowStyleIndex = 0.0;
+		double BeardStyleIndex = 0.0;
+
+		(*AppearanceObject)->TryGetNumberField(TEXT("skinPresetIndex"), SkinPresetIndex);
+		(*AppearanceObject)->TryGetNumberField(TEXT("headPresetIndex"), HeadPresetIndex);
+		(*AppearanceObject)->TryGetNumberField(TEXT("hairStyleIndex"), HairStyleIndex);
+		(*AppearanceObject)->TryGetNumberField(TEXT("hairColorIndex"), HairColorIndex);
+		(*AppearanceObject)->TryGetNumberField(TEXT("browStyleIndex"), BrowStyleIndex);
+		(*AppearanceObject)->TryGetNumberField(TEXT("beardStyleIndex"), BeardStyleIndex);
+
+		OutCharacter.Appearance.SkinPresetIndex = FMath::Max(0, FMath::RoundToInt(SkinPresetIndex));
+		OutCharacter.Appearance.HeadPresetIndex = FMath::Max(0, FMath::RoundToInt(HeadPresetIndex));
+		OutCharacter.Appearance.HairStyleIndex = FMath::Max(0, FMath::RoundToInt(HairStyleIndex));
+		OutCharacter.Appearance.HairColorIndex = FMath::Max(0, FMath::RoundToInt(HairColorIndex));
+		OutCharacter.Appearance.BrowStyleIndex = FMath::Max(0, FMath::RoundToInt(BrowStyleIndex));
+		OutCharacter.Appearance.BeardStyleIndex = FMath::Max(0, FMath::RoundToInt(BeardStyleIndex));
+	}
 
 	const TSharedPtr<FJsonObject>* LocationObject = nullptr;
 	if (JsonObject->TryGetObjectField(TEXT("location"), LocationObject))

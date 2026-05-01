@@ -21,6 +21,33 @@ enum class EWUCharacterSex : uint8
 };
 
 USTRUCT(BlueprintType)
+struct FWUCharacterAppearance
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	EWUCharacterSex Sex = EWUCharacterSex::Male;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 SkinPresetIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 HeadPresetIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 HairStyleIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 HairColorIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 BrowStyleIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 BeardStyleIndex = 0;
+};
+
+USTRUCT(BlueprintType)
 struct FWUCharacterCreateRequest
 {
 	GENERATED_BODY()

@@ -26,6 +26,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 command.Name,
                 command.Race,
                 command.Sex,
+                command.Appearance,
                 startingLevel,
                 CharacterStatRules.Calculate(command.Race, startingLevel),
                 new CharacterLocation(0.0f, 0.0f, 0.0f));
@@ -45,12 +46,16 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     public async Task<IReadOnlyList<CharacterSummary>> ListForAccountRealmAsync(Guid accountId, Guid realmId, CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT id, name, race, sex, level, position_x, position_y, position_z
-            FROM characters
-            WHERE account_id = @account_id
-              AND realm_id = @realm_id
-              AND deleted_at IS NULL
-            ORDER BY created_at ASC;
+            SELECT c.id, c.name, c.race, c.sex, c.level, c.position_x, c.position_y, c.position_z,
+                   COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
+                   COALESCE(ca.hair_style_index, 0) AS hair_style_index,
+                   COALESCE(ca.hair_color_index, 0) AS hair_color_index
+            FROM characters c
+            LEFT JOIN character_appearances ca ON ca.character_id = c.id
+            WHERE c.account_id = @account_id
+              AND c.realm_id = @realm_id
+              AND c.deleted_at IS NULL
+            ORDER BY c.created_at ASC;
             """;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -71,16 +76,24 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     public async Task<CharacterSummary?> UpdateLocationAsync(Guid accountId, Guid realmId, Guid characterId, CharacterLocation location, CancellationToken cancellationToken)
     {
         const string sql = """
-            UPDATE characters
-            SET position_x = @position_x,
-                position_y = @position_y,
-                position_z = @position_z,
-                updated_at = now()
-            WHERE id = @character_id
-              AND account_id = @account_id
-              AND realm_id = @realm_id
-              AND deleted_at IS NULL
-            RETURNING id, name, race, sex, level, position_x, position_y, position_z;
+            WITH updated AS (
+                UPDATE characters
+                SET position_x = @position_x,
+                    position_y = @position_y,
+                    position_z = @position_z,
+                    updated_at = now()
+                WHERE id = @character_id
+                  AND account_id = @account_id
+                  AND realm_id = @realm_id
+                  AND deleted_at IS NULL
+                RETURNING id, name, race, sex, level, position_x, position_y, position_z
+            )
+            SELECT u.id, u.name, u.race, u.sex, u.level, u.position_x, u.position_y, u.position_z,
+                   COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
+                   COALESCE(ca.hair_style_index, 0) AS hair_style_index,
+                   COALESCE(ca.hair_color_index, 0) AS hair_color_index
+            FROM updated u
+            LEFT JOIN character_appearances ca ON ca.character_id = u.id;
             """;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -151,6 +164,10 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             Name: reader.GetString(1),
             Race: race,
             Sex: (EWuCharacterSex)reader.GetInt16(3),
+            Appearance: new CharacterAppearanceDraft(
+                SkinPresetIndex: reader.GetInt32(8),
+                HairStyleIndex: reader.GetInt32(9),
+                HairColorIndex: reader.GetInt32(10)),
             Level: level,
             Stats: CharacterStatRules.Calculate(race, level),
             Location: new CharacterLocation(

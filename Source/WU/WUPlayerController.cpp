@@ -1038,6 +1038,7 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
 	{
 		WUCharacter->ApplyCharacterProgression(SelectedCharacter->Race, SelectedCharacter->Level);
+		WUCharacter->ApplyCharacterAppearance(SelectedCharacter->Appearance);
 		WUCharacter->SetDisplayName(FText::FromString(SelectedCharacter->Name));
 
 		if (AppliedSessionSpawnCharacterId != SelectedCharacterId && !SelectedCharacter->Location.IsNearlyZero())

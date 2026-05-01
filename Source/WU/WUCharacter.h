@@ -13,6 +13,9 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UMaterialInterface;
+class USkeletalMesh;
+class USkeletalMeshComponent;
 class UTexture2D;
 class UUserWidget;
 class AActor;
@@ -94,6 +97,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD")
 	TObjectPtr<UTexture2D> PortraitTexture;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> HeadMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> HairMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> BrowsMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> BeardMeshComponent;
+
 public:
 
 	/** Constructor */
@@ -152,6 +167,10 @@ public:
 	/** Equipped item slots replicated from the server. */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_InventoryChanged, Category = "Inventory")
 	TArray<FWUEquipmentSlotEntry> EquipmentSlots;
+
+	/** Modular humanoid appearance used by the live gameplay pawn. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterAppearance, Category = "Appearance")
+	FWUCharacterAppearance CharacterAppearance;
 
 	/** Blood status currently stored in the character creation race field */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
@@ -232,6 +251,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool GetEquippedItem(EWUEquipmentSlot EquipmentSlot, FWUInventoryItem& OutItem) const;
 
+	UFUNCTION(BlueprintPure, Category = "Appearance")
+	FWUCharacterAppearance GetCharacterAppearance() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Appearance")
+	void ApplyCharacterAppearance(const FWUCharacterAppearance& NewAppearance);
+
 	/** Equips the item in the requested bag slot, swapping with occupied equipment when needed. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool EquipInventorySlot(int32 SlotIndex);
@@ -311,6 +336,9 @@ public:
 	UFUNCTION()
 	void OnRep_InventoryChanged();
 
+	UFUNCTION()
+	void OnRep_CharacterAppearance();
+
 	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
 	void UpdateDeathStateEffects();
 
@@ -322,10 +350,28 @@ public:
 	int32 FindEquipmentEntryIndex(EWUEquipmentSlot EquipmentSlot) const;
 	int32 FindFirstFreeInventorySlot() const;
 	bool AddItemToInventory(const FWUInventoryItem& Item);
+	void ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const;
+	void ApplyCharacterAppearanceMeshes();
+	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
+	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
+	UClass* LoadAnimClassForPath(const TCHAR* AssetPath) const;
+	const TCHAR* GetBodyMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetHeadMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetHairMeshPath(EWUCharacterSex Sex, int32 HairStyleIndex) const;
+	const TCHAR* GetBrowsMeshPath(EWUCharacterSex Sex, int32 BrowStyleIndex) const;
+	const TCHAR* GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const;
+	const TCHAR* GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const;
+	const TCHAR* GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const;
+	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
+	const TCHAR* GetAnimationBlueprintPath(EWUCharacterSex Sex) const;
+	int32 NormalizeAppearanceIndex(int32 Index, int32 Count) const;
 	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources);
 
 	UFUNCTION(Server, Reliable)
 	void ServerApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel);
+
+	UFUNCTION(Server, Reliable)
+	void ServerApplyCharacterAppearance(const FWUCharacterAppearance& NewAppearance);
 
 	UFUNCTION(Server, Reliable)
 	void ServerEquipInventorySlot(int32 SlotIndex);
