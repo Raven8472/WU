@@ -6,5 +6,7 @@ public interface ICharacterRepository
 
     Task<IReadOnlyList<CharacterSummary>> ListForAccountRealmAsync(Guid accountId, Guid realmId, CancellationToken cancellationToken);
 
+    Task<bool> DeleteAsync(Guid accountId, Guid realmId, Guid characterId, CancellationToken cancellationToken);
+
     Task<CharacterSummary?> UpdateLocationAsync(Guid accountId, Guid realmId, Guid characterId, CharacterLocation location, CancellationToken cancellationToken);
 }

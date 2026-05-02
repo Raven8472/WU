@@ -62,6 +62,7 @@ private:
 	const TCHAR* GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const;
 	const TCHAR* GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const;
 	const TCHAR* GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const;
+	const TCHAR* GetEyeMaterialPath(int32 EyeColorIndex) const;
 	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
 
 	int32 NormalizeIndex(int32 Index, int32 Count) const;

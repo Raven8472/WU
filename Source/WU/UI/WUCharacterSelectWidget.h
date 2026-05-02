@@ -51,6 +51,9 @@ private:
 	void HandleCharacterCreated(const FWUBackendCharacterSummary& Character);
 
 	UFUNCTION()
+	void HandleCharacterDeleted(const FString& CharacterId);
+
+	UFUNCTION()
 	void HandleRequestFailed(const FString& ErrorMessage);
 
 	UFUNCTION()
@@ -59,6 +62,7 @@ private:
 	FReply HandleCreateClicked();
 	FReply HandleRefreshClicked();
 	FReply HandleSelectClicked(FString CharacterId);
+	FReply HandleDeleteClicked(FString CharacterId, FString CharacterName);
 	FReply HandleEnterGameClicked();
 	FText GetStatusText() const;
 

@@ -11,6 +11,8 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
 
     public async Task<CharacterSummary> CreateAsync(CreateCharacterCommand command, CancellationToken cancellationToken)
     {
+        await EnsureCharacterSchemaAsync(cancellationToken);
+
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
@@ -45,11 +47,17 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
 
     public async Task<IReadOnlyList<CharacterSummary>> ListForAccountRealmAsync(Guid accountId, Guid realmId, CancellationToken cancellationToken)
     {
+        await EnsureCharacterSchemaAsync(cancellationToken);
+
         const string sql = """
             SELECT c.id, c.name, c.race, c.sex, c.level, c.position_x, c.position_y, c.position_z,
                    COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
+                   COALESCE(ca.head_preset_index, 0) AS head_preset_index,
                    COALESCE(ca.hair_style_index, 0) AS hair_style_index,
-                   COALESCE(ca.hair_color_index, 0) AS hair_color_index
+                   COALESCE(ca.hair_color_index, 0) AS hair_color_index,
+                   COALESCE(ca.eye_color_index, 1) AS eye_color_index,
+                   COALESCE(ca.brow_style_index, 0) AS brow_style_index,
+                   COALESCE(ca.beard_style_index, 0) AS beard_style_index
             FROM characters c
             LEFT JOIN character_appearances ca ON ca.character_id = c.id
             WHERE c.account_id = @account_id
@@ -73,8 +81,33 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         return characters;
     }
 
+    public async Task<bool> DeleteAsync(Guid accountId, Guid realmId, Guid characterId, CancellationToken cancellationToken)
+    {
+        await EnsureCharacterSchemaAsync(cancellationToken);
+
+        const string sql = """
+            UPDATE characters
+            SET deleted_at = now(),
+                updated_at = now()
+            WHERE id = @character_id
+              AND account_id = @account_id
+              AND realm_id = @realm_id
+              AND deleted_at IS NULL;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var dbCommand = new NpgsqlCommand(sql, connection);
+        dbCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+        dbCommand.Parameters.AddWithValue("account_id", NpgsqlDbType.Uuid, accountId);
+        dbCommand.Parameters.AddWithValue("realm_id", NpgsqlDbType.Uuid, realmId);
+
+        return await dbCommand.ExecuteNonQueryAsync(cancellationToken) > 0;
+    }
+
     public async Task<CharacterSummary?> UpdateLocationAsync(Guid accountId, Guid realmId, Guid characterId, CharacterLocation location, CancellationToken cancellationToken)
     {
+        await EnsureCharacterSchemaAsync(cancellationToken);
+
         const string sql = """
             WITH updated AS (
                 UPDATE characters
@@ -90,8 +123,12 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             )
             SELECT u.id, u.name, u.race, u.sex, u.level, u.position_x, u.position_y, u.position_z,
                    COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
+                   COALESCE(ca.head_preset_index, 0) AS head_preset_index,
                    COALESCE(ca.hair_style_index, 0) AS hair_style_index,
-                   COALESCE(ca.hair_color_index, 0) AS hair_color_index
+                   COALESCE(ca.hair_color_index, 0) AS hair_color_index,
+                   COALESCE(ca.eye_color_index, 1) AS eye_color_index,
+                   COALESCE(ca.brow_style_index, 0) AS brow_style_index,
+                   COALESCE(ca.beard_style_index, 0) AS beard_style_index
             FROM updated u
             LEFT JOIN character_appearances ca ON ca.character_id = u.id;
             """;
@@ -135,23 +172,64 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     private static async Task InsertAppearanceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid characterId, CreateCharacterCommand command, CancellationToken cancellationToken)
     {
         const string sql = """
-            INSERT INTO character_appearances (character_id, skin_preset_index, hair_style_index, hair_color_index)
-            VALUES (@character_id, @skin_preset_index, @hair_style_index, @hair_color_index);
+            INSERT INTO character_appearances (
+                character_id,
+                skin_preset_index,
+                head_preset_index,
+                hair_style_index,
+                hair_color_index,
+                eye_color_index,
+                brow_style_index,
+                beard_style_index)
+            VALUES (
+                @character_id,
+                @skin_preset_index,
+                @head_preset_index,
+                @hair_style_index,
+                @hair_color_index,
+                @eye_color_index,
+                @brow_style_index,
+                @beard_style_index);
             """;
 
         await using var dbCommand = new NpgsqlCommand(sql, connection);
         dbCommand.Transaction = transaction;
         dbCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
         dbCommand.Parameters.AddWithValue("skin_preset_index", NpgsqlDbType.Integer, command.Appearance.SkinPresetIndex);
+        dbCommand.Parameters.AddWithValue("head_preset_index", NpgsqlDbType.Integer, command.Appearance.HeadPresetIndex);
         dbCommand.Parameters.AddWithValue("hair_style_index", NpgsqlDbType.Integer, command.Appearance.HairStyleIndex);
         dbCommand.Parameters.AddWithValue("hair_color_index", NpgsqlDbType.Integer, command.Appearance.HairColorIndex);
+        dbCommand.Parameters.AddWithValue("eye_color_index", NpgsqlDbType.Integer, command.Appearance.EyeColorIndex);
+        dbCommand.Parameters.AddWithValue("brow_style_index", NpgsqlDbType.Integer, command.Appearance.BrowStyleIndex);
+        dbCommand.Parameters.AddWithValue("beard_style_index", NpgsqlDbType.Integer, command.Appearance.BeardStyleIndex);
 
         await dbCommand.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private async Task EnsureCharacterSchemaAsync(CancellationToken cancellationToken)
+    {
+        const string sql = """
+            ALTER TABLE character_appearances
+                ADD COLUMN IF NOT EXISTS head_preset_index integer NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS eye_color_index integer NOT NULL DEFAULT 1,
+                ADD COLUMN IF NOT EXISTS brow_style_index integer NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS beard_style_index integer NOT NULL DEFAULT 0;
+
+            ALTER TABLE characters DROP CONSTRAINT IF EXISTS uq_characters_realm_name;
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_characters_realm_name_active
+                ON characters(realm_id, normalized_name)
+                WHERE deleted_at IS NULL;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static bool IsCharacterNameConstraint(PostgresException exception)
     {
-        return string.Equals(exception.ConstraintName, "uq_characters_realm_name", StringComparison.Ordinal);
+        return string.Equals(exception.ConstraintName, "uq_characters_realm_name", StringComparison.Ordinal)
+            || string.Equals(exception.ConstraintName, "uq_characters_realm_name_active", StringComparison.Ordinal);
     }
 
     private static CharacterSummary ReadCharacterSummary(NpgsqlDataReader reader)
@@ -166,8 +244,12 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             Sex: (EWuCharacterSex)reader.GetInt16(3),
             Appearance: new CharacterAppearanceDraft(
                 SkinPresetIndex: reader.GetInt32(8),
-                HairStyleIndex: reader.GetInt32(9),
-                HairColorIndex: reader.GetInt32(10)),
+                HeadPresetIndex: reader.GetInt32(9),
+                HairStyleIndex: reader.GetInt32(10),
+                HairColorIndex: reader.GetInt32(11),
+                EyeColorIndex: reader.GetInt32(12),
+                BrowStyleIndex: reader.GetInt32(13),
+                BeardStyleIndex: reader.GetInt32(14)),
             Level: level,
             Stats: CharacterStatRules.Calculate(race, level),
             Location: new CharacterLocation(

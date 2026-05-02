@@ -97,6 +97,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUClientSessionSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionErrorSignature, const FString&, ErrorMessage);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharactersSignature, const TArray<FWUBackendCharacterSummary>&, Characters);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterSignature, const FWUBackendCharacterSummary&, Character);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterDeletedSignature, const FString&, CharacterId);
 
 /**
  * Client-side bridge to the WU persistence backend.
@@ -124,6 +125,9 @@ public:
 	FWUClientSessionCharacterSignature OnCharacterCreated;
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
+	FWUClientSessionCharacterDeletedSignature OnCharacterDeleted;
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionErrorSignature OnRequestFailed;
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
@@ -137,6 +141,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void CreateCharacter(const FWUCharacterCreateRequest& Request);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Session")
+	void DeleteCharacter(const FString& CharacterId);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void SelectCharacter(const FString& CharacterId);
@@ -183,6 +190,7 @@ private:
 	void HandleCurrentSessionResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleListCharactersResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleCreateCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleDeleteCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded, FString CharacterId);
 	void HandleSaveCharacterLocationResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;

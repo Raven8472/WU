@@ -89,6 +89,7 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 	AppearanceObject->SetNumberField(TEXT("headPresetIndex"), RequestData.HeadPresetIndex);
 	AppearanceObject->SetNumberField(TEXT("hairStyleIndex"), RequestData.HairStyleIndex);
 	AppearanceObject->SetNumberField(TEXT("hairColorIndex"), RequestData.HairColorIndex);
+	AppearanceObject->SetNumberField(TEXT("eyeColorIndex"), RequestData.EyeColorIndex);
 	AppearanceObject->SetNumberField(TEXT("browStyleIndex"), RequestData.BrowStyleIndex);
 	AppearanceObject->SetNumberField(TEXT("beardStyleIndex"), RequestData.BeardStyleIndex);
 	RootObject->SetObjectField(TEXT("appearance"), AppearanceObject);
@@ -100,6 +101,31 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/characters"));
 	Request->SetContentAsString(Body);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateCharacterResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::DeleteCharacter(const FString& CharacterId)
+{
+	if (!HasSessionContext())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login and realm selection are required before deleting a character."));
+		return;
+	}
+
+	if (CharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Select a character before deleting."));
+		return;
+	}
+
+	const FString Path = FString::Printf(
+		TEXT("/api/accounts/%s/realms/%s/characters/%s"),
+		*Account.AccountId,
+		*SelectedRealmId,
+		*CharacterId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("DELETE"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleDeleteCharacterResponse, CharacterId);
 	Request->ProcessRequest();
 }
 
@@ -368,6 +394,34 @@ void UWUClientSessionSubsystem::HandleCreateCharacterResponse(FHttpRequestPtr Re
 	OnCharactersLoaded.Broadcast(Characters);
 }
 
+void UWUClientSessionSubsystem::HandleDeleteCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded, FString CharacterId)
+{
+	if (!bSucceeded || !Response.IsValid())
+	{
+		OnRequestFailed.Broadcast(TEXT("Character delete request failed."));
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()) && Response->GetResponseCode() != 204)
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	Characters.RemoveAll([&CharacterId](const FWUBackendCharacterSummary& Character)
+	{
+		return Character.CharacterId == CharacterId;
+	});
+
+	if (SelectedCharacterId == CharacterId)
+	{
+		SelectedCharacterId = Characters.IsEmpty() ? FString() : Characters[0].CharacterId;
+	}
+
+	OnCharactersLoaded.Broadcast(Characters);
+	OnCharacterDeleted.Broadcast(CharacterId);
+}
+
 void UWUClientSessionSubsystem::HandleSaveCharacterLocationResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
 {
 	TSharedPtr<FJsonObject> RootObject;
@@ -559,6 +613,7 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 		double HeadPresetIndex = 0.0;
 		double HairStyleIndex = 0.0;
 		double HairColorIndex = 0.0;
+		double EyeColorIndex = 1.0;
 		double BrowStyleIndex = 0.0;
 		double BeardStyleIndex = 0.0;
 
@@ -566,6 +621,7 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 		(*AppearanceObject)->TryGetNumberField(TEXT("headPresetIndex"), HeadPresetIndex);
 		(*AppearanceObject)->TryGetNumberField(TEXT("hairStyleIndex"), HairStyleIndex);
 		(*AppearanceObject)->TryGetNumberField(TEXT("hairColorIndex"), HairColorIndex);
+		(*AppearanceObject)->TryGetNumberField(TEXT("eyeColorIndex"), EyeColorIndex);
 		(*AppearanceObject)->TryGetNumberField(TEXT("browStyleIndex"), BrowStyleIndex);
 		(*AppearanceObject)->TryGetNumberField(TEXT("beardStyleIndex"), BeardStyleIndex);
 
@@ -573,6 +629,7 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 		OutCharacter.Appearance.HeadPresetIndex = FMath::Max(0, FMath::RoundToInt(HeadPresetIndex));
 		OutCharacter.Appearance.HairStyleIndex = FMath::Max(0, FMath::RoundToInt(HairStyleIndex));
 		OutCharacter.Appearance.HairColorIndex = FMath::Max(0, FMath::RoundToInt(HairColorIndex));
+		OutCharacter.Appearance.EyeColorIndex = FMath::Max(0, FMath::RoundToInt(EyeColorIndex));
 		OutCharacter.Appearance.BrowStyleIndex = FMath::Max(0, FMath::RoundToInt(BrowStyleIndex));
 		OutCharacter.Appearance.BeardStyleIndex = FMath::Max(0, FMath::RoundToInt(BeardStyleIndex));
 	}

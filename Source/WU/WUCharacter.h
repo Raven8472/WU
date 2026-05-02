@@ -383,7 +383,7 @@ public:
 	const TCHAR* GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const;
 	const TCHAR* GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const;
 	const TCHAR* GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const;
-	const TCHAR* GetEyeMaterialPath() const;
+	const TCHAR* GetEyeMaterialPath(int32 EyeColorIndex) const;
 	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
 	const TCHAR* GetAnimationBlueprintPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetPantsMeshPath(EWUCharacterSex Sex) const;

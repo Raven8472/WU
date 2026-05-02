@@ -219,6 +219,33 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
 				[
 					CreateStepperRow(
+						LOCTEXT("EyeColor", "Eye Color"),
+						TAttribute<FText>::CreateLambda([this]()
+						{
+							switch (CurrentRequest.EyeColorIndex)
+							{
+							case 0:
+								return LOCTEXT("EyeColorBlue", "Blue");
+							case 1:
+								return LOCTEXT("EyeColorBrown", "Brown");
+							case 2:
+								return LOCTEXT("EyeColorGreen", "Green");
+							case 3:
+								return LOCTEXT("EyeColorPale", "Pale");
+							default:
+								return LOCTEXT("EyeColorUnknown", "Unknown");
+							}
+						}),
+						[this]() { CycleEyeColor(-1); },
+						[this]() { CycleEyeColor(1); }
+					)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+				[
+					CreateStepperRow(
 						LOCTEXT("Brows", "Brows"),
 						TAttribute<FText>::CreateLambda([this]()
 						{
@@ -400,6 +427,12 @@ void UWUCharacterCreatorWidget::CycleHairStyle(int32 Delta)
 void UWUCharacterCreatorWidget::CycleHairColor(int32 Delta)
 {
 	CurrentRequest.HairColorIndex = FMath::Clamp(CurrentRequest.HairColorIndex + Delta, 0, 3);
+	RefreshPreview();
+}
+
+void UWUCharacterCreatorWidget::CycleEyeColor(int32 Delta)
+{
+	CurrentRequest.EyeColorIndex = FMath::Clamp(CurrentRequest.EyeColorIndex + Delta, 0, 3);
 	RefreshPreview();
 }
 

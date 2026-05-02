@@ -101,10 +101,44 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 
 	if (UMaterialInterface* HeadMaterial = LoadMaterialForPath(GetHeadMaterialPath(Request.Sex, Request.HeadPresetIndex)))
 	{
-		const int32 MaterialCount = HeadMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+		bool bAppliedHeadMaterial = false;
+		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
 		{
-			HeadMeshComponent->SetMaterial(MaterialIndex, HeadMaterial);
+			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
+			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
+					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
+					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
+			{
+				HeadMeshComponent->SetMaterial(MaterialIndex, HeadMaterial);
+				bAppliedHeadMaterial = true;
+			}
+		}
+
+		if (!bAppliedHeadMaterial && HeadMeshComponent->GetNumMaterials() > 0)
+		{
+			HeadMeshComponent->SetMaterial(0, HeadMaterial);
+		}
+	}
+
+	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(GetEyeMaterialPath(Request.EyeColorIndex)))
+	{
+		bool bAppliedEyeMaterial = false;
+		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase))
+			{
+				HeadMeshComponent->SetMaterial(MaterialIndex, EyeMaterial);
+				bAppliedEyeMaterial = true;
+			}
+		}
+
+		if (!bAppliedEyeMaterial && HeadMeshComponent->GetNumMaterials() > 1)
+		{
+			HeadMeshComponent->SetMaterial(1, EyeMaterial);
 		}
 	}
 
@@ -287,6 +321,19 @@ const TCHAR* AWUCharacterCreatorPreviewActor::GetHeadMaterialPath(EWUCharacterSe
 	}
 
 	return MaleHeadMaterialPaths[NormalizeIndex(HeadPresetIndex, UE_ARRAY_COUNT(MaleHeadMaterialPaths))];
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetEyeMaterialPath(int32 EyeColorIndex) const
+{
+	static const TCHAR* EyeMaterialPaths[] =
+	{
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Bl.MI_HU_Eye_Bl"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Br.MI_HU_Eye_Br"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Gn.MI_HU_Eye_Gn"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Pe.MI_HU_Eye_Pe")
+	};
+
+	return EyeMaterialPaths[NormalizeIndex(EyeColorIndex, UE_ARRAY_COUNT(EyeMaterialPaths))];
 }
 
 const TCHAR* AWUCharacterCreatorPreviewActor::GetHairMaterialPath(int32 HairColorIndex) const

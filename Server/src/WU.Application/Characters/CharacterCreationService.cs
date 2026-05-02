@@ -74,6 +74,11 @@ public sealed class CharacterCreationService(ICharacterRepository repository)
             errors.Add("skinPresetIndex must be zero or greater.");
         }
 
+        if (request.Appearance.HeadPresetIndex < 0)
+        {
+            errors.Add("headPresetIndex must be zero or greater.");
+        }
+
         if (request.Appearance.HairStyleIndex < 0)
         {
             errors.Add("hairStyleIndex must be zero or greater.");
@@ -82,6 +87,21 @@ public sealed class CharacterCreationService(ICharacterRepository repository)
         if (request.Appearance.HairColorIndex < 0)
         {
             errors.Add("hairColorIndex must be zero or greater.");
+        }
+
+        if (request.Appearance.EyeColorIndex < 0)
+        {
+            errors.Add("eyeColorIndex must be zero or greater.");
+        }
+
+        if (request.Appearance.BrowStyleIndex < 0)
+        {
+            errors.Add("browStyleIndex must be zero or greater.");
+        }
+
+        if (request.Appearance.BeardStyleIndex < 0)
+        {
+            errors.Add("beardStyleIndex must be zero or greater.");
         }
 
         return errors;

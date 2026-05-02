@@ -50,6 +50,7 @@ void UWUCharacterSelectWidget::NativeConstruct()
 	{
 		Session->OnCharactersLoaded.AddDynamic(this, &UWUCharacterSelectWidget::HandleCharactersLoaded);
 		Session->OnCharacterCreated.AddDynamic(this, &UWUCharacterSelectWidget::HandleCharacterCreated);
+		Session->OnCharacterDeleted.AddDynamic(this, &UWUCharacterSelectWidget::HandleCharacterDeleted);
 		Session->OnRequestFailed.AddDynamic(this, &UWUCharacterSelectWidget::HandleRequestFailed);
 		RefreshCharacterRows();
 	}
@@ -68,6 +69,7 @@ void UWUCharacterSelectWidget::NativeDestruct()
 		{
 			Session->OnCharactersLoaded.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleCharactersLoaded);
 			Session->OnCharacterCreated.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleCharacterCreated);
+			Session->OnCharacterDeleted.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleCharacterDeleted);
 			Session->OnRequestFailed.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleRequestFailed);
 		}
 	}
@@ -233,6 +235,12 @@ void UWUCharacterSelectWidget::HandleCharacterCreated(const FWUBackendCharacterS
 	}
 }
 
+void UWUCharacterSelectWidget::HandleCharacterDeleted(const FString& CharacterId)
+{
+	StatusText = LOCTEXT("CharacterDeleted", "Character deleted");
+	RefreshCharacterRows();
+}
+
 void UWUCharacterSelectWidget::HandleRequestFailed(const FString& ErrorMessage)
 {
 	StatusText = FText::FromString(ErrorMessage);
@@ -292,6 +300,17 @@ FReply UWUCharacterSelectWidget::HandleSelectClicked(FString CharacterId)
 		Session->SelectCharacter(CharacterId);
 		StatusText = LOCTEXT("CharacterSelected", "Character selected");
 		RefreshCharacterRows();
+	}
+
+	return FReply::Handled();
+}
+
+FReply UWUCharacterSelectWidget::HandleDeleteClicked(FString CharacterId, FString CharacterName)
+{
+	if (UWUClientSessionSubsystem* Session = GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>())
+	{
+		StatusText = FText::Format(LOCTEXT("DeletingCharacter", "Deleting {0}..."), FText::FromString(CharacterName));
+		Session->DeleteCharacter(CharacterId);
 	}
 
 	return FReply::Handled();
@@ -430,6 +449,20 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterRow(const FWUBacken
 				[
 					SNew(STextBlock)
 					.Text(bSelected ? LOCTEXT("Selected", "Selected") : LOCTEXT("Select", "Select"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+				]
+			]
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+			[
+				SNew(SButton)
+				.ContentPadding(FMargin(10.0f, 6.0f))
+				.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleDeleteClicked, Character.CharacterId, Character.Name)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("Delete", "Delete"))
 					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
 				]
 			]

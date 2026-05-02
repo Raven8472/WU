@@ -41,6 +41,9 @@ struct FWUCharacterAppearance
 	int32 HairColorIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
+	int32 EyeColorIndex = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
 	int32 BrowStyleIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Appearance")
@@ -72,6 +75,9 @@ struct FWUCharacterCreateRequest
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
 	int32 HairColorIndex = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
+	int32 EyeColorIndex = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
 	int32 BrowStyleIndex = 0;

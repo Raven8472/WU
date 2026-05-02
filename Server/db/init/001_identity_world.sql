@@ -51,20 +51,24 @@ CREATE TABLE IF NOT EXISTS characters (
     CONSTRAINT ck_characters_race CHECK (race BETWEEN 0 AND 2),
     CONSTRAINT ck_characters_sex CHECK (sex BETWEEN 0 AND 1),
     CONSTRAINT ck_characters_house CHECK (house IS NULL OR house BETWEEN 0 AND 3),
-    CONSTRAINT ck_characters_level CHECK (level >= 1),
-    CONSTRAINT uq_characters_realm_name UNIQUE (realm_id, normalized_name)
+    CONSTRAINT ck_characters_level CHECK (level >= 1)
 );
 
 CREATE TABLE IF NOT EXISTS character_appearances (
     character_id uuid PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
     skin_preset_index integer NOT NULL DEFAULT 0,
+    head_preset_index integer NOT NULL DEFAULT 0,
     hair_style_index integer NOT NULL DEFAULT 0,
     hair_color_index integer NOT NULL DEFAULT 0,
+    eye_color_index integer NOT NULL DEFAULT 1,
+    brow_style_index integer NOT NULL DEFAULT 0,
+    beard_style_index integer NOT NULL DEFAULT 0,
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS ix_characters_account_realm ON characters(account_id, realm_id);
 CREATE INDEX IF NOT EXISTS ix_characters_zone ON characters(current_zone_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_characters_realm_name_active ON characters(realm_id, normalized_name) WHERE deleted_at IS NULL;
 
 INSERT INTO realms (id, slug, display_name)
 VALUES ('00000000-0000-0000-0000-000000000001', 'local-dev', 'Local Dev')

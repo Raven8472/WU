@@ -986,7 +986,7 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		}
 	}
 
-	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(GetEyeMaterialPath()))
+	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(GetEyeMaterialPath(CharacterAppearance.EyeColorIndex)))
 	{
 		bool bAppliedEyeMaterial = false;
 		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
@@ -1181,9 +1181,17 @@ const TCHAR* AWUCharacter::GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPr
 	return MaleHeadMaterialPaths[NormalizeAppearanceIndex(HeadPresetIndex, UE_ARRAY_COUNT(MaleHeadMaterialPaths))];
 }
 
-const TCHAR* AWUCharacter::GetEyeMaterialPath() const
+const TCHAR* AWUCharacter::GetEyeMaterialPath(int32 EyeColorIndex) const
 {
-	return TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Br.MI_HU_Eye_Br");
+	static const TCHAR* EyeMaterialPaths[] =
+	{
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Bl.MI_HU_Eye_Bl"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Br.MI_HU_Eye_Br"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Gn.MI_HU_Eye_Gn"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Pe.MI_HU_Eye_Pe")
+	};
+
+	return EyeMaterialPaths[NormalizeAppearanceIndex(EyeColorIndex, UE_ARRAY_COUNT(EyeMaterialPaths))];
 }
 
 const TCHAR* AWUCharacter::GetHairMaterialPath(int32 HairColorIndex) const

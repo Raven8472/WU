@@ -26,6 +26,7 @@ builder.Services.AddScoped<ICharacterRepository, PostgresCharacterRepository>();
 builder.Services.AddScoped<CharacterCreationService>();
 builder.Services.AddScoped<CharacterQueryService>();
 builder.Services.AddScoped<CharacterLocationService>();
+builder.Services.AddScoped<CharacterDeletionService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
 builder.Services.AddScoped<AuthService>();
@@ -119,6 +120,19 @@ app.MapGet("/api/accounts/{accountId:guid}/realms/{realmId:guid}/characters", as
         CharacterListStatus.Found => Results.Ok(result.Characters),
         CharacterListStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_list_request", messages = result.Errors }),
         _ => Results.Problem("Characters could not be loaded.")
+    };
+});
+
+app.MapDelete("/api/accounts/{accountId:guid}/realms/{realmId:guid}/characters/{characterId:guid}", async (Guid accountId, Guid realmId, Guid characterId, CharacterDeletionService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.DeleteAsync(accountId, realmId, characterId, cancellationToken);
+
+    return result.Status switch
+    {
+        CharacterDeletionStatus.Deleted => Results.NoContent(),
+        CharacterDeletionStatus.NotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CharacterDeletionStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_delete_request", messages = result.Errors }),
+        _ => Results.Problem("The character could not be deleted.")
     };
 });
 

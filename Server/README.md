@@ -27,6 +27,7 @@ The API exposes:
 - `GET /api/characters/schema`
 - `POST /api/characters`
 - `GET /api/accounts/{accountId}/realms/{realmId}/characters`
+- `DELETE /api/accounts/{accountId}/realms/{realmId}/characters/{characterId}`
 
 ## Ubuntu Runtime
 
@@ -59,8 +60,12 @@ Example body:
   "sex": "Female",
   "appearance": {
     "skinPresetIndex": 0,
+    "headPresetIndex": 0,
     "hairStyleIndex": 0,
-    "hairColorIndex": 0
+    "hairColorIndex": 0,
+    "eyeColorIndex": 1,
+    "browStyleIndex": 0,
+    "beardStyleIndex": 0
   }
 }
 ```
