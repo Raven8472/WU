@@ -429,6 +429,7 @@ public:
 	int32 FindEquipmentEntryIndex(EWUEquipmentSlot EquipmentSlot) const;
 	int32 FindFirstFreeInventorySlot() const;
 	bool AddItemToInventory(const FWUInventoryItem& Item);
+	void ApplyCameraCollisionRules() const;
 	void ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const;
 	void ApplyCharacterAppearanceMeshes();
 	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;

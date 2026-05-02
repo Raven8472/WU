@@ -115,6 +115,8 @@ AWUCharacter::AWUCharacter()
 	BootsOutfitMeshComponent->SetupAttachment(GetMesh());
 	ConfigureModularMeshComponent(BootsOutfitMeshComponent);
 
+	ApplyCameraCollisionRules();
+
 	bReplicates = true;
 
 	PrimaryStats = WUCharacterStats::CalculatePrimaryStats(BloodStatus, CharacterLevel);
@@ -157,6 +159,7 @@ void AWUCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	DefaultRotationRateDegreesPerSecond = GetCharacterMovement()->RotationRate.Yaw;
+	ApplyCameraCollisionRules();
 
 	if (HasAuthority())
 	{
@@ -1205,6 +1208,19 @@ bool AWUCharacter::AddItemToInventory(const FWUInventoryItem& Item)
 	return true;
 }
 
+void AWUCharacter::ApplyCameraCollisionRules() const
+{
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	}
+
+	if (USkeletalMeshComponent* BodyMesh = GetMesh())
+	{
+		BodyMesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	}
+}
+
 void AWUCharacter::ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const
 {
 	if (!MeshComponent)
@@ -1213,6 +1229,7 @@ void AWUCharacter::ConfigureModularMeshComponent(USkeletalMeshComponent* MeshCom
 	}
 
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshComponent->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	MeshComponent->SetGenerateOverlapEvents(false);
 	MeshComponent->SetLeaderPoseComponent(GetMesh());
 	MeshComponent->SetIsReplicated(false);
