@@ -214,6 +214,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats", meta = (ClampMin = 1, ClampMax = 80))
 	int32 CharacterLevel = 1;
 
+	/** Current experience progress within the active level */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats", meta = (ClampMin = 0))
+	int32 CharacterExperience = 0;
+
 	/** Primary stats after human baseline, level growth, and blood-status modifiers */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
 	FWUPrimaryStats PrimaryStats;
@@ -221,6 +225,10 @@ public:
 	/** Derived combat values calculated from primary stats */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterStats, Category = "Stats")
 	FWUDerivedStats DerivedStats;
+
+	/** Kill reward granted to the attacker when this character dies */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Progression", meta = (ClampMin = 0))
+	int32 KillExperienceReward = 120;
 
 	/** Sets up which variables replicate */
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -245,6 +253,14 @@ public:
 	/** Applies level and blood status, then recalculates primary and derived stats */
 	UFUNCTION(BlueprintCallable, Category = "Stats")
 	void ApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel);
+
+	/** Applies level, experience, and blood status, then recalculates primary and derived stats */
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void ApplyCharacterProgressionState(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience);
+
+	/** Awards experience and resolves level-up progression on the authority side */
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AwardExperience(int32 Amount, EWUExperienceSource Source);
 
 	/** Returns health normalized to the max health for HUD usage */
 	UFUNCTION(BlueprintPure, Category = "Combat")
@@ -304,6 +320,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Stats")
 	int32 GetCharacterLevel() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	int32 GetCharacterExperience() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	int32 GetExperienceToNextLevel() const;
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	float GetExperiencePercent() const;
 
 	UFUNCTION(BlueprintPure, Category = "Stats")
 	FWUPrimaryStats GetPrimaryStats() const;
@@ -411,10 +436,13 @@ public:
 	const TCHAR* GetStarterBeltOutfitMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetStarterBootsOutfitMeshPath(EWUCharacterSex Sex) const;
 	int32 NormalizeAppearanceIndex(int32 Index, int32 Count) const;
-	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources);
+	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience, bool bResetResources);
 
 	UFUNCTION(Server, Reliable)
 	void ServerApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel);
+
+	UFUNCTION(Server, Reliable)
+	void ServerApplyCharacterProgressionState(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience);
 
 	UFUNCTION(Server, Reliable)
 	void ServerApplyCharacterAppearance(const FWUCharacterAppearance& NewAppearance);

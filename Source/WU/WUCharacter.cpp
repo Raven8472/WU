@@ -120,6 +120,7 @@ AWUCharacter::AWUCharacter()
 	DerivedStats = WUCharacterStats::CalculateDerivedStats(PrimaryStats);
 	MaxHealth = DerivedStats.MaxHealth;
 	MaxMagic = DerivedStats.MaxMagic;
+	CharacterExperience = 0;
 	Health = MaxHealth;
 	Magic = MaxMagic;
 	bIsDead = false;
@@ -142,6 +143,7 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AWUCharacter, bInCombat);
 	DOREPLIFETIME(AWUCharacter, BloodStatus);
 	DOREPLIFETIME(AWUCharacter, CharacterLevel);
+	DOREPLIFETIME(AWUCharacter, CharacterExperience);
 	DOREPLIFETIME(AWUCharacter, PrimaryStats);
 	DOREPLIFETIME(AWUCharacter, DerivedStats);
 	DOREPLIFETIME(AWUCharacter, InventorySlots);
@@ -155,7 +157,7 @@ void AWUCharacter::BeginPlay()
 
 	if (HasAuthority())
 	{
-		ApplyCharacterProgressionInternal(BloodStatus, CharacterLevel, true);
+		ApplyCharacterProgressionInternal(BloodStatus, CharacterLevel, CharacterExperience, true);
 		bIsDead = false;
 		bHasReleased = false;
 		InitializeInventoryStorage();
@@ -332,7 +334,7 @@ float AWUCharacter::CalculateDamage() const
 
 void AWUCharacter::ApplyCharacterProgression(EWUCharacterRace NewBloodStatus, int32 NewLevel)
 {
-	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, true);
+	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, 0, true);
 
 	if (!HasAuthority())
 	{
@@ -342,14 +344,32 @@ void AWUCharacter::ApplyCharacterProgression(EWUCharacterRace NewBloodStatus, in
 
 void AWUCharacter::ServerApplyCharacterProgression_Implementation(EWUCharacterRace NewBloodStatus, int32 NewLevel)
 {
-	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, true);
+	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, 0, true);
 	ForceNetUpdate();
 }
 
-void AWUCharacter::ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources)
+void AWUCharacter::ApplyCharacterProgressionState(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience)
 {
+	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, NewExperience, true);
+
+	if (!HasAuthority())
+	{
+		ServerApplyCharacterProgressionState(NewBloodStatus, NewLevel, NewExperience);
+	}
+}
+
+void AWUCharacter::ServerApplyCharacterProgressionState_Implementation(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience)
+{
+	ApplyCharacterProgressionInternal(NewBloodStatus, NewLevel, NewExperience, true);
+	ForceNetUpdate();
+}
+
+void AWUCharacter::ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience, bool bResetResources)
+{
+	const FWUExperienceProgression NormalizedProgression = WUCharacterStats::ResolveExperienceAward(NewLevel, NewExperience, 0);
 	BloodStatus = NewBloodStatus;
-	CharacterLevel = WUCharacterStats::ClampCharacterLevel(NewLevel);
+	CharacterLevel = NormalizedProgression.Level;
+	CharacterExperience = NormalizedProgression.Experience;
 	PrimaryStats = WUCharacterStats::CalculatePrimaryStats(BloodStatus, CharacterLevel);
 	DerivedStats = WUCharacterStats::CalculateDerivedStats(PrimaryStats);
 
@@ -371,6 +391,9 @@ void AWUCharacter::ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodSt
 
 void AWUCharacter::OnRep_CharacterStats()
 {
+	const FWUExperienceProgression NormalizedProgression = WUCharacterStats::ResolveExperienceAward(CharacterLevel, CharacterExperience, 0);
+	CharacterLevel = NormalizedProgression.Level;
+	CharacterExperience = NormalizedProgression.Experience;
 	Health = FMath::Clamp(Health, 0.0f, MaxHealth);
 	Magic = FMath::Clamp(Magic, 0.0f, MaxMagic);
 }
@@ -556,6 +579,24 @@ int32 AWUCharacter::GetCharacterLevel() const
 	return CharacterLevel;
 }
 
+int32 AWUCharacter::GetCharacterExperience() const
+{
+	return CharacterExperience;
+}
+
+int32 AWUCharacter::GetExperienceToNextLevel() const
+{
+	return WUCharacterStats::GetExperienceToNextLevel(CharacterLevel);
+}
+
+float AWUCharacter::GetExperiencePercent() const
+{
+	const int32 ExperienceToNext = GetExperienceToNextLevel();
+	return ExperienceToNext > 0
+		? FMath::Clamp(static_cast<float>(CharacterExperience) / static_cast<float>(ExperienceToNext), 0.0f, 1.0f)
+		: 1.0f;
+}
+
 FWUPrimaryStats AWUCharacter::GetPrimaryStats() const
 {
 	return PrimaryStats;
@@ -564,6 +605,38 @@ FWUPrimaryStats AWUCharacter::GetPrimaryStats() const
 FWUDerivedStats AWUCharacter::GetDerivedStats() const
 {
 	return DerivedStats;
+}
+
+void AWUCharacter::AwardExperience(int32 Amount, EWUExperienceSource Source)
+{
+	if (!HasAuthority() || Amount <= 0)
+	{
+		return;
+	}
+
+	const FWUExperienceProgression UpdatedProgression = WUCharacterStats::ResolveExperienceAward(
+		CharacterLevel,
+		CharacterExperience,
+		Amount);
+	const bool bLeveledUp = UpdatedProgression.Level != CharacterLevel;
+	ApplyCharacterProgressionInternal(BloodStatus, UpdatedProgression.Level, UpdatedProgression.Experience, false);
+	ForceNetUpdate();
+
+	if (AWUPlayerController* OwningController = Cast<AWUPlayerController>(GetController()))
+	{
+		OwningController->Client_HandleExperienceAward(Amount, Source);
+	}
+
+	if (GEngine)
+	{
+		const FString SourceLabel = StaticEnum<EWUExperienceSource>()
+			? StaticEnum<EWUExperienceSource>()->GetNameStringByValue(static_cast<int64>(Source))
+			: TEXT("Experience");
+		const FString ProgressionMessage = bLeveledUp
+			? FString::Printf(TEXT("%s gained %d %s XP and reached level %d"), *GetName(), Amount, *SourceLabel, CharacterLevel)
+			: FString::Printf(TEXT("%s gained %d %s XP"), *GetName(), Amount, *SourceLabel);
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, ProgressionMessage);
+	}
 }
 
 FText AWUCharacter::GetDisplayName() const
@@ -1525,6 +1598,11 @@ bool AWUCharacter::ApplyDamage(float Amount, AWUCharacter* DamageCauser)
 
 	if (Health <= 0.0f)
 	{
+		if (DamageCauser && DamageCauser != this && KillExperienceReward > 0)
+		{
+			DamageCauser->AwardExperience(KillExperienceReward, EWUExperienceSource::Kill);
+		}
+
 		bIsDead = true;
 		bHasReleased = false;
 		bInCombat = false;

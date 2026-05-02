@@ -84,6 +84,12 @@ struct FWUBackendCharacterSummary
 	int32 Level = 1;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	int32 Experience = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	int32 ExperienceToNextLevel = 500;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	FWUPrimaryStats PrimaryStats;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
@@ -125,6 +131,9 @@ public:
 	FWUClientSessionCharacterSignature OnCharacterCreated;
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
+	FWUClientSessionCharacterSignature OnCharacterUpdated;
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionCharacterDeletedSignature OnCharacterDeleted;
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
@@ -150,6 +159,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void SaveSelectedCharacterLocation(const FVector& Location);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Session")
+	void AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
@@ -192,6 +204,7 @@ private:
 	void HandleCreateCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleDeleteCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded, FString CharacterId);
 	void HandleSaveCharacterLocationResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleAwardCharacterExperienceResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
@@ -207,6 +220,8 @@ private:
 	static bool TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation);
 	static bool TryParseRace(const FString& Value, EWUCharacterRace& OutRace);
 	static bool TryParseSex(const FString& Value, EWUCharacterSex& OutSex);
+	static FString ExperienceSourceToString(EWUExperienceSource Source);
+	bool UpdateCachedCharacter(const FWUBackendCharacterSummary& UpdatedCharacter);
 
 private:
 	FString AccessToken;

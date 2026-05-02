@@ -24,11 +24,27 @@ public sealed record CharacterStats(
     CharacterPrimaryStats Primary,
     CharacterDerivedStats Derived);
 
+public sealed record CharacterExperienceProgression(
+    int Level,
+    int Experience,
+    int ExperienceToNextLevel,
+    int LevelsGained,
+    bool ReachedLevelCap);
+
+public enum CharacterExperienceSource
+{
+    Exploration,
+    QuestTurnIn,
+    Kill
+}
+
 public static class CharacterStatRules
 {
     public const int MinLevel = 1;
     public const int MaxLevel = 80;
     public const int HumanBaselineStat = 10;
+    public const int BaseExperienceToNextLevel = 500;
+    public const int ExperienceQuadraticFactor = 55;
 
     public static CharacterStats Calculate(EWuCharacterRace bloodStatus, int level)
     {
@@ -94,5 +110,61 @@ public static class CharacterStatRules
     public static int GetHumanBaselineStatForLevel(int level)
     {
         return HumanBaselineStat + (ClampCharacterLevel(level) - MinLevel);
+    }
+
+    public static int GetExperienceToNextLevel(int currentLevel)
+    {
+        var level = ClampCharacterLevel(currentLevel);
+        if (level >= MaxLevel)
+        {
+            return 0;
+        }
+
+        return checked(BaseExperienceToNextLevel + (level * level * ExperienceQuadraticFactor));
+    }
+
+    public static int GetTotalExperienceToReachLevel(int targetLevel)
+    {
+        var clampedTargetLevel = ClampCharacterLevel(targetLevel);
+        var totalExperience = 0;
+
+        for (var level = MinLevel; level < clampedTargetLevel; level++)
+        {
+            totalExperience = checked(totalExperience + GetExperienceToNextLevel(level));
+        }
+
+        return totalExperience;
+    }
+
+    public static CharacterExperienceProgression ResolveExperienceAward(int currentLevel, int currentExperience, int awardedExperience)
+    {
+        var level = ClampCharacterLevel(currentLevel);
+        long remainingExperience = Math.Max(0L, currentExperience) + Math.Max(0L, awardedExperience);
+        var levelsGained = 0;
+
+        while (level < MaxLevel)
+        {
+            var experienceToNextLevel = GetExperienceToNextLevel(level);
+            if (remainingExperience < experienceToNextLevel)
+            {
+                return new CharacterExperienceProgression(
+                    Level: level,
+                    Experience: (int)remainingExperience,
+                    ExperienceToNextLevel: experienceToNextLevel,
+                    LevelsGained: levelsGained,
+                    ReachedLevelCap: false);
+            }
+
+            remainingExperience -= experienceToNextLevel;
+            level++;
+            levelsGained++;
+        }
+
+        return new CharacterExperienceProgression(
+            Level: MaxLevel,
+            Experience: 0,
+            ExperienceToNextLevel: 0,
+            LevelsGained: levelsGained,
+            ReachedLevelCap: true);
     }
 }

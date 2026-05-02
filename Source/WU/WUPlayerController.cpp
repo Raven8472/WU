@@ -874,6 +874,36 @@ void AWUPlayerController::SubmitCharacterCreateRequest(const FWUCharacterCreateR
 	ShowTargetingDebugMessage(Summary, FColor::Green);
 }
 
+void AWUPlayerController::RequestSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source)
+{
+	if (Amount <= 0)
+	{
+		return;
+	}
+
+	Server_RequestSelectedCharacterExperience(Amount, Source);
+}
+
+void AWUPlayerController::GrantExplorationExperience(int32 Amount)
+{
+	RequestSelectedCharacterExperience(Amount, EWUExperienceSource::Exploration);
+}
+
+void AWUPlayerController::GrantQuestTurnInExperience(int32 Amount)
+{
+	RequestSelectedCharacterExperience(Amount, EWUExperienceSource::QuestTurnIn);
+}
+
+void AWUPlayerController::Client_HandleExperienceAward_Implementation(int32 Amount, EWUExperienceSource Source)
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (Session)
+	{
+		Session->AwardSelectedCharacterExperience(Amount, Source);
+	}
+}
+
 bool AWUPlayerController::IsChatInputOpen() const
 {
 	return ChatWidget && ChatWidget->IsInputOpen();
@@ -1037,7 +1067,7 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 
 	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
 	{
-		WUCharacter->ApplyCharacterProgression(SelectedCharacter->Race, SelectedCharacter->Level);
+		WUCharacter->ApplyCharacterProgressionState(SelectedCharacter->Race, SelectedCharacter->Level, SelectedCharacter->Experience);
 		WUCharacter->ApplyCharacterAppearance(SelectedCharacter->Appearance);
 		WUCharacter->SetDisplayName(FText::FromString(SelectedCharacter->Name));
 
@@ -1075,6 +1105,19 @@ void AWUPlayerController::SaveSelectedCharacterLocation()
 	}
 
 	Session->SaveSelectedCharacterLocation(ControlledPawn->GetActorLocation());
+}
+
+void AWUPlayerController::Server_RequestSelectedCharacterExperience_Implementation(int32 Amount, EWUExperienceSource Source)
+{
+	if (Amount <= 0)
+	{
+		return;
+	}
+
+	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
+	{
+		WUCharacter->AwardExperience(Amount, Source);
+	}
 }
 
 void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message)

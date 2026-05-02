@@ -8,4 +8,5 @@ public sealed record WuCharacter(
     EWuCharacterRace Race,
     EWuCharacterSex Sex,
     EWuHouse? House,
-    int Level);
+    int Level,
+    int Experience);

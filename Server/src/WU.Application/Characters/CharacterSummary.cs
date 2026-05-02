@@ -9,5 +9,7 @@ public sealed record CharacterSummary(
     EWuCharacterSex Sex,
     CharacterAppearanceDraft Appearance,
     int Level,
+    int Experience,
+    int ExperienceToNextLevel,
     CharacterStats Stats,
     CharacterLocation Location);

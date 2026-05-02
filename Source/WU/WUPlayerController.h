@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "CharacterCreation/WUCharacterCreationTypes.h"
+#include "CharacterStats/WUCharacterStats.h"
 #include "GameFramework/PlayerController.h"
 #include "WUPlayerController.generated.h"
 
@@ -321,6 +322,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Character Creation")
 	void SubmitCharacterCreateRequest(const FWUCharacterCreateRequest& Request);
 
+	/** Routes a progression award through the gameplay authority. */
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void RequestSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source);
+
+	/** Awards exploration XP through the shared progression path. */
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void GrantExplorationExperience(int32 Amount);
+
+	/** Awards quest turn-in XP through the shared progression path. */
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void GrantQuestTurnInExperience(int32 Amount);
+
+	/** Owning client persists awarded XP to the account backend. */
+	UFUNCTION(Client, Reliable)
+	void Client_HandleExperienceAward(int32 Amount, EWUExperienceSource Source);
+
 protected:
 
 	/** Gameplay initialization */
@@ -383,17 +400,13 @@ protected:
 	/** Persists the selected character's current world location. */
 	void SaveSelectedCharacterLocation();
 
+	/** Server-authoritative experience award entry point. */
+	UFUNCTION(Server, Reliable)
+	void Server_RequestSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source);
+
 	/** Server-side player chat entry point. */
 	UFUNCTION(Server, Reliable)
 	void Server_SendChatMessage(const FString& Message);
-
-	/** Client-side chat delivery. */
-	UFUNCTION(Client, Reliable)
-	void Client_ReceiveChatMessage(const FString& SenderName, const FString& Message);
-
-	/** Client-side target update used when server-authoritative damage selects a target. */
-	UFUNCTION(Client, Reliable)
-	void Client_AutoTargetDamagedCharacter(AWUCharacter* DamagedCharacter);
 
 	/** Handles replicated target updates from server-authoritative systems */
 	UFUNCTION()
@@ -404,6 +417,14 @@ protected:
 	void OnCurrentTargetDestroyed(AActor* DestroyedActor);
 
 private:
+
+	/** Client-side chat delivery. */
+	UFUNCTION(Client, Reliable)
+	void Client_ReceiveChatMessage(const FString& SenderName, const FString& Message);
+
+	/** Client-side target update used when server-authoritative damage selects a target. */
+	UFUNCTION(Client, Reliable)
+	void Client_AutoTargetDamagedCharacter(AWUCharacter* DamagedCharacter);
 
 	float LastChatMessageServerTime = -1000.0f;
 	FString AppliedSessionCharacterId;

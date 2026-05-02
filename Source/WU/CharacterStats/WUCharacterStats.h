@@ -66,14 +66,48 @@ struct FWUDerivedStats
 	float MagicCostReductionPercent = 1.0f;
 };
 
+UENUM(BlueprintType)
+enum class EWUExperienceSource : uint8
+{
+	Exploration,
+	QuestTurnIn,
+	Kill
+};
+
+USTRUCT(BlueprintType)
+struct FWUExperienceProgression
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Stats")
+	int32 Level = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Stats")
+	int32 Experience = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Stats")
+	int32 ExperienceToNextLevel = 500;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Stats")
+	int32 LevelsGained = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Stats")
+	bool bReachedLevelCap = false;
+};
+
 namespace WUCharacterStats
 {
 	constexpr int32 MinLevel = 1;
 	constexpr int32 MaxLevel = 80;
 	constexpr int32 HumanBaselineStat = 10;
+	constexpr int32 BaseExperienceToNextLevel = 500;
+	constexpr int32 ExperienceQuadraticFactor = 55;
 
 	int32 ClampCharacterLevel(int32 Level);
 	int32 GetHumanBaselineStatForLevel(int32 Level);
+	int32 GetExperienceToNextLevel(int32 CurrentLevel);
+	int32 GetTotalExperienceToReachLevel(int32 TargetLevel);
+	FWUExperienceProgression ResolveExperienceAward(int32 CurrentLevel, int32 CurrentExperience, int32 AwardedExperience);
 	FWUPrimaryStats CalculatePrimaryStats(EWUCharacterRace BloodStatus, int32 Level);
 	FWUDerivedStats CalculateDerivedStats(const FWUPrimaryStats& PrimaryStats);
 	FWUDerivedStats CalculateDerivedStats(EWUCharacterRace BloodStatus, int32 Level);

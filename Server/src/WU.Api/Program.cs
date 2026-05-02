@@ -26,6 +26,7 @@ builder.Services.AddScoped<ICharacterRepository, PostgresCharacterRepository>();
 builder.Services.AddScoped<CharacterCreationService>();
 builder.Services.AddScoped<CharacterQueryService>();
 builder.Services.AddScoped<CharacterLocationService>();
+builder.Services.AddScoped<CharacterExperienceService>();
 builder.Services.AddScoped<CharacterDeletionService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
@@ -146,6 +147,19 @@ app.MapPut("/api/characters/{characterId:guid}/location", async (Guid characterI
         CharacterLocationStatus.NotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
         CharacterLocationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_location_request", messages = result.Errors }),
         _ => Results.Problem("The character location could not be updated.")
+    };
+});
+
+app.MapPost("/api/characters/{characterId:guid}/experience", async (Guid characterId, AwardCharacterExperienceRequest request, CharacterExperienceService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.AwardAsync(characterId, request, cancellationToken);
+
+    return result.Status switch
+    {
+        CharacterExperienceStatus.Awarded => Results.Ok(result.Character),
+        CharacterExperienceStatus.NotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CharacterExperienceStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_experience_request", messages = result.Errors }),
+        _ => Results.Problem("The character experience could not be updated.")
     };
 });
 

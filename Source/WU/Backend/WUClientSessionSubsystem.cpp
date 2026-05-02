@@ -162,6 +162,36 @@ void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Loc
 	Request->ProcessRequest();
 }
 
+void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		return;
+	}
+
+	if (Amount <= 0)
+	{
+		OnRequestFailed.Broadcast(TEXT("Experience awards must be greater than zero."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
+	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	RootObject->SetNumberField(TEXT("amount"), Amount);
+	RootObject->SetStringField(TEXT("source"), ExperienceSourceToString(Source));
+
+	FString Body;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
+
+	const FString Path = FString::Printf(TEXT("/api/characters/%s/experience"), *SelectedCharacterId);
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
+	Request->SetContentAsString(Body);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleAwardCharacterExperienceResponse);
+	Request->ProcessRequest();
+}
+
 void UWUClientSessionSubsystem::ClearSession()
 {
 	AccessToken.Reset();
@@ -445,13 +475,36 @@ void UWUClientSessionSubsystem::HandleSaveCharacterLocationResponse(FHttpRequest
 		return;
 	}
 
-	for (FWUBackendCharacterSummary& Character : Characters)
+	UpdateCachedCharacter(UpdatedCharacter);
+}
+
+void UWUClientSessionSubsystem::HandleAwardCharacterExperienceResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
 	{
-		if (Character.CharacterId == UpdatedCharacter.CharacterId)
-		{
-			Character = UpdatedCharacter;
-			return;
-		}
+		UE_LOG(LogWU, Warning, TEXT("Character experience award failed: %s"), *ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		UE_LOG(LogWU, Warning, TEXT("Character experience award failed: %s"), *ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendCharacterSummary UpdatedCharacter;
+	if (!TryParseCharacter(RootObject, UpdatedCharacter))
+	{
+		UE_LOG(LogWU, Warning, TEXT("Character experience award response did not include a valid character."));
+		return;
+	}
+
+	if (UpdateCachedCharacter(UpdatedCharacter))
+	{
+		OnCharacterUpdated.Broadcast(UpdatedCharacter);
+		OnCharactersLoaded.Broadcast(Characters);
 	}
 }
 
@@ -587,6 +640,8 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 	FString RaceValue;
 	FString SexValue;
 	double LevelValue = 1.0;
+	double ExperienceValue = 0.0;
+	double ExperienceToNextLevelValue = static_cast<double>(WUCharacterStats::GetExperienceToNextLevel(1));
 	if (!JsonObject->TryGetStringField(TEXT("characterId"), OutCharacter.CharacterId)
 		|| !JsonObject->TryGetStringField(TEXT("name"), OutCharacter.Name)
 		|| !JsonObject->TryGetStringField(TEXT("race"), RaceValue)
@@ -603,6 +658,24 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 
 	OutCharacter.Appearance.Sex = OutCharacter.Sex;
 	OutCharacter.Level = FMath::Max(1, FMath::RoundToInt(LevelValue));
+	JsonObject->TryGetNumberField(TEXT("experience"), ExperienceValue);
+	OutCharacter.Experience = FMath::Max(0, FMath::RoundToInt(ExperienceValue));
+	if (JsonObject->TryGetNumberField(TEXT("experienceToNextLevel"), ExperienceToNextLevelValue))
+	{
+		OutCharacter.ExperienceToNextLevel = FMath::Max(0, FMath::RoundToInt(ExperienceToNextLevelValue));
+	}
+	else
+	{
+		OutCharacter.ExperienceToNextLevel = WUCharacterStats::GetExperienceToNextLevel(OutCharacter.Level);
+	}
+
+	const FWUExperienceProgression NormalizedProgression = WUCharacterStats::ResolveExperienceAward(
+		OutCharacter.Level,
+		OutCharacter.Experience,
+		0);
+	OutCharacter.Level = NormalizedProgression.Level;
+	OutCharacter.Experience = NormalizedProgression.Experience;
+	OutCharacter.ExperienceToNextLevel = NormalizedProgression.ExperienceToNextLevel;
 	OutCharacter.PrimaryStats = WUCharacterStats::CalculatePrimaryStats(OutCharacter.Race, OutCharacter.Level);
 	OutCharacter.DerivedStats = WUCharacterStats::CalculateDerivedStats(OutCharacter.PrimaryStats);
 
@@ -701,6 +774,38 @@ bool UWUClientSessionSubsystem::TryParseSex(const FString& Value, EWUCharacterSe
 	{
 		OutSex = EWUCharacterSex::Female;
 		return true;
+	}
+
+	return false;
+}
+
+FString UWUClientSessionSubsystem::ExperienceSourceToString(EWUExperienceSource Source)
+{
+	switch (Source)
+	{
+	case EWUExperienceSource::Exploration:
+		return TEXT("Exploration");
+
+	case EWUExperienceSource::QuestTurnIn:
+		return TEXT("QuestTurnIn");
+
+	case EWUExperienceSource::Kill:
+		return TEXT("Kill");
+
+	default:
+		return TEXT("Kill");
+	}
+}
+
+bool UWUClientSessionSubsystem::UpdateCachedCharacter(const FWUBackendCharacterSummary& UpdatedCharacter)
+{
+	for (FWUBackendCharacterSummary& Character : Characters)
+	{
+		if (Character.CharacterId == UpdatedCharacter.CharacterId)
+		{
+			Character = UpdatedCharacter;
+			return true;
+		}
 	}
 
 	return false;

@@ -14,6 +14,58 @@ namespace WUCharacterStats
 		return HumanBaselineStat + (ClampCharacterLevel(Level) - MinLevel);
 	}
 
+	int32 GetExperienceToNextLevel(int32 CurrentLevel)
+	{
+		const int32 Level = ClampCharacterLevel(CurrentLevel);
+		if (Level >= MaxLevel)
+		{
+			return 0;
+		}
+
+		return BaseExperienceToNextLevel + (Level * Level * ExperienceQuadraticFactor);
+	}
+
+	int32 GetTotalExperienceToReachLevel(int32 TargetLevel)
+	{
+		const int32 ClampedTargetLevel = ClampCharacterLevel(TargetLevel);
+		int32 TotalExperience = 0;
+
+		for (int32 Level = MinLevel; Level < ClampedTargetLevel; ++Level)
+		{
+			TotalExperience += GetExperienceToNextLevel(Level);
+		}
+
+		return TotalExperience;
+	}
+
+	FWUExperienceProgression ResolveExperienceAward(int32 CurrentLevel, int32 CurrentExperience, int32 AwardedExperience)
+	{
+		FWUExperienceProgression Progression;
+		Progression.Level = ClampCharacterLevel(CurrentLevel);
+		int64 RemainingExperience = FMath::Max<int64>(0, static_cast<int64>(CurrentExperience))
+			+ FMath::Max<int64>(0, static_cast<int64>(AwardedExperience));
+
+		while (Progression.Level < MaxLevel)
+		{
+			Progression.ExperienceToNextLevel = GetExperienceToNextLevel(Progression.Level);
+			if (RemainingExperience < Progression.ExperienceToNextLevel)
+			{
+				Progression.Experience = static_cast<int32>(RemainingExperience);
+				return Progression;
+			}
+
+			RemainingExperience -= Progression.ExperienceToNextLevel;
+			Progression.Level++;
+			Progression.LevelsGained++;
+		}
+
+		Progression.Level = MaxLevel;
+		Progression.Experience = 0;
+		Progression.ExperienceToNextLevel = 0;
+		Progression.bReachedLevelCap = true;
+		return Progression;
+	}
+
 	FWUPrimaryStats CalculatePrimaryStats(EWUCharacterRace BloodStatus, int32 Level)
 	{
 		const int32 Baseline = GetHumanBaselineStatForLevel(Level);
