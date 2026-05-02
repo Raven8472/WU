@@ -23,9 +23,63 @@
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
 #include "Blueprint/UserWidget.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
 #include "WUPlayerController.h"
+
+namespace
+{
+	TAutoConsoleVariable<int32> CVarWULogCharacterMaterialSlots(
+		TEXT("wu.Character.LogMaterialSlots"),
+		0,
+		TEXT("Logs WU modular character material slots. 0=off, 1=once per mesh/component, 2=every appearance refresh."),
+		ECVF_Default);
+
+	void LogMaterialSlotsForComponent(const AActor* Owner, const TCHAR* Label, const USkeletalMeshComponent* MeshComponent)
+	{
+		if (!MeshComponent || CVarWULogCharacterMaterialSlots.GetValueOnGameThread() <= 0)
+		{
+			return;
+		}
+
+		const FString MeshPath = GetPathNameSafe(MeshComponent->GetSkeletalMeshAsset());
+		if (MeshPath.IsEmpty())
+		{
+			return;
+		}
+
+		const FString LogKey = FString::Printf(TEXT("%s|%s"), Label, *MeshPath);
+		static TSet<FString> LoggedMaterialSlotKeys;
+		if (CVarWULogCharacterMaterialSlots.GetValueOnGameThread() == 1)
+		{
+			if (LoggedMaterialSlotKeys.Contains(LogKey))
+			{
+				return;
+			}
+
+			LoggedMaterialSlotKeys.Add(LogKey);
+		}
+
+		const TArray<FName> MaterialSlotNames = MeshComponent->GetMaterialSlotNames();
+		UE_LOG(LogTemp, Warning, TEXT("WU Material Slots | Owner=%s | Component=%s | Mesh=%s | Visible=%s | HiddenInGame=%s | SlotCount=%d | MaterialCount=%d"),
+			*GetNameSafe(Owner),
+			Label,
+			*MeshPath,
+			MeshComponent->IsVisible() ? TEXT("true") : TEXT("false"),
+			MeshComponent->bHiddenInGame ? TEXT("true") : TEXT("false"),
+			MaterialSlotNames.Num(),
+			MeshComponent->GetNumMaterials());
+
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WU Material Slots |   [%d] Slot=%s | Material=%s"),
+				MaterialIndex,
+				*MaterialSlotNames[MaterialIndex].ToString(),
+				*GetPathNameSafe(MeshComponent->GetMaterial(MaterialIndex)));
+		}
+	}
+}
 
 AWUCharacter::AWUCharacter()
 {
@@ -1526,6 +1580,19 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 	}
 
 	ApplyEquippedItemMeshes();
+
+	LogMaterialSlotsForComponent(this, TEXT("FullBody"), GetMesh());
+	LogMaterialSlotsForComponent(this, TEXT("Head"), HeadMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("Hair"), HairMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("Brows"), BrowsMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("Beard"), BeardMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("Pants"), PantsMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("Hands"), HandsMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("Bracers"), BracersMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("ChestOutfit"), ChestOutfitMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("ChestAddOutfit"), ChestAddOutfitMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("BeltOutfit"), BeltOutfitMeshComponent);
+	LogMaterialSlotsForComponent(this, TEXT("BootsOutfit"), BootsOutfitMeshComponent);
 }
 
 void AWUCharacter::ApplyEquippedItemMeshes()
