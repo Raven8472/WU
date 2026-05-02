@@ -27,6 +27,18 @@ enum class EWUEquipmentSlot : uint8
 	Bracelet2
 };
 
+UENUM(BlueprintType)
+enum class EWUItemVisualLayer : uint8
+{
+	None,
+	ChestOutfit,
+	ChestAddOutfit,
+	BeltOutfit,
+	Bracers,
+	Pants,
+	Boots
+};
+
 USTRUCT(BlueprintType)
 struct FWUInventoryItem
 {
@@ -46,6 +58,18 @@ struct FWUInventoryItem
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory")
 	FLinearColor ItemTint = FLinearColor(0.80f, 0.72f, 0.52f, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")
+	FName IconId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")
+	EWUItemVisualLayer VisualLayer = EWUItemVisualLayer::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")
+	bool bCoversTorso = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")
+	bool bCoversLegs = false;
 };
 
 USTRUCT(BlueprintType)
@@ -78,6 +102,10 @@ struct FWUEquipmentSlotEntry
 namespace WUInventory
 {
 	const TArray<EWUEquipmentSlot>& GetAllEquipmentSlots();
+	const TArray<FName>& GetStarterEquippedItemIds();
+	const TArray<FName>& GetStarterInventoryItemIds();
+	const FWUInventoryItem* FindItemDefinition(FName ItemId);
+	FWUInventoryItem MakeItem(FName ItemId);
 	FText EquipmentSlotToText(EWUEquipmentSlot Slot);
 	FString GetShortItemLabel(const FWUInventoryItem& Item);
 }

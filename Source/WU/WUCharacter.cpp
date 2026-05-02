@@ -27,20 +27,6 @@
 #include "Materials/MaterialInterface.h"
 #include "WUPlayerController.h"
 
-namespace
-{
-	FWUInventoryItem MakeStarterItem(FName ItemId, const TCHAR* DisplayName, EWUEquipmentSlot EquipmentSlot, const FLinearColor& ItemTint)
-	{
-		FWUInventoryItem Item;
-		Item.ItemId = ItemId;
-		Item.DisplayName = DisplayName;
-		Item.EquipmentSlot = EquipmentSlot;
-		Item.bEquippable = true;
-		Item.ItemTint = ItemTint;
-		return Item;
-	}
-}
-
 AWUCharacter::AWUCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -1040,27 +1026,23 @@ void AWUCharacter::SeedStarterInventory()
 	{
 		if (!HasAnyEquippedItem())
 		{
-			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_robes"), TEXT("First-Year Robes"), EWUEquipmentSlot::ChestRobes, FLinearColor(0.18f, 0.25f, 0.36f, 1.0f)));
-			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shirt"), TEXT("Linen Shirt"), EWUEquipmentSlot::Shirt, FLinearColor(0.82f, 0.78f, 0.68f, 1.0f)));
-			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_belt"), TEXT("Leather Belt"), EWUEquipmentSlot::Belt, FLinearColor(0.35f, 0.24f, 0.16f, 1.0f)));
-			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_gloves"), TEXT("School Gloves"), EWUEquipmentSlot::Gloves, FLinearColor(0.30f, 0.28f, 0.25f, 1.0f)));
-			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_pants"), TEXT("School Trousers"), EWUEquipmentSlot::PantsSkirt, FLinearColor(0.34f, 0.36f, 0.32f, 1.0f)));
-			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shoes"), TEXT("School Shoes"), EWUEquipmentSlot::Shoes, FLinearColor(0.22f, 0.18f, 0.14f, 1.0f)));
+			for (const FName StarterItemId : WUInventory::GetStarterEquippedItemIds())
+			{
+				EquipStarterVisualItem(WUInventory::MakeItem(StarterItemId));
+			}
 		}
 		return;
 	}
 
-	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_robes"), TEXT("First-Year Robes"), EWUEquipmentSlot::ChestRobes, FLinearColor(0.18f, 0.25f, 0.36f, 1.0f)));
-	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shirt"), TEXT("Linen Shirt"), EWUEquipmentSlot::Shirt, FLinearColor(0.82f, 0.78f, 0.68f, 1.0f)));
-	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_belt"), TEXT("Leather Belt"), EWUEquipmentSlot::Belt, FLinearColor(0.35f, 0.24f, 0.16f, 1.0f)));
-	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_gloves"), TEXT("School Gloves"), EWUEquipmentSlot::Gloves, FLinearColor(0.30f, 0.28f, 0.25f, 1.0f)));
-	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_pants"), TEXT("School Trousers"), EWUEquipmentSlot::PantsSkirt, FLinearColor(0.34f, 0.36f, 0.32f, 1.0f)));
-	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shoes"), TEXT("School Shoes"), EWUEquipmentSlot::Shoes, FLinearColor(0.22f, 0.18f, 0.14f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_wand"), TEXT("Holly Wand"), EWUEquipmentSlot::Wand, FLinearColor(0.75f, 0.55f, 0.28f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_hat"), TEXT("Wool Hat"), EWUEquipmentSlot::Hat, FLinearColor(0.32f, 0.27f, 0.22f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_ring"), TEXT("Copper Ring"), EWUEquipmentSlot::Ring1, FLinearColor(0.86f, 0.46f, 0.22f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_bracelet"), TEXT("Woven Bracelet"), EWUEquipmentSlot::Bracelet1, FLinearColor(0.40f, 0.58f, 0.34f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_nicnak"), TEXT("Tiny Nicnak"), EWUEquipmentSlot::Nicnak1, FLinearColor(0.45f, 0.64f, 0.88f, 1.0f)));
+	for (const FName StarterItemId : WUInventory::GetStarterEquippedItemIds())
+	{
+		EquipStarterVisualItem(WUInventory::MakeItem(StarterItemId));
+	}
+
+	for (const FName StarterItemId : WUInventory::GetStarterInventoryItemIds())
+	{
+		AddItemToInventory(WUInventory::MakeItem(StarterItemId));
+	}
 }
 
 void AWUCharacter::EquipStarterVisualItem(const FWUInventoryItem& Item)
@@ -1415,10 +1397,27 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 
 	if (UMaterialInterface* BodyMaterial = LoadMaterialForPath(GetBodyMaterialPath(CharacterAppearance.Sex, CharacterAppearance.SkinPresetIndex)))
 	{
-		const int32 MaterialCount = GetMesh()->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
+		bool bAppliedBodyMaterial = false;
+		for (int32 MaterialIndex = 0; MaterialIndex < BodyMaterialSlotNames.Num(); ++MaterialIndex)
 		{
-			GetMesh()->SetMaterial(MaterialIndex, BodyMaterial);
+			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
+			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase))
+			{
+				GetMesh()->SetMaterial(MaterialIndex, BodyMaterial);
+				bAppliedBodyMaterial = true;
+			}
+		}
+
+		if (!bAppliedBodyMaterial)
+		{
+			const int32 MaterialCount = GetMesh()->GetNumMaterials();
+			for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+			{
+				GetMesh()->SetMaterial(MaterialIndex, BodyMaterial);
+			}
 		}
 
 		const int32 HandsMaterialCount = HandsMeshComponent->GetNumMaterials();
@@ -1461,6 +1460,18 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		{
 			HeadMeshComponent->SetMaterial(0, HeadMaterial);
 		}
+
+		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < BodyMaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
+			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
+					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)))
+			{
+				GetMesh()->SetMaterial(MaterialIndex, HeadMaterial);
+			}
+		}
 	}
 
 	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(GetEyeMaterialPath(CharacterAppearance.EyeColorIndex)))
@@ -1480,6 +1491,16 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		if (!bAppliedEyeMaterial && HeadMeshComponent->GetNumMaterials() > 1)
 		{
 			HeadMeshComponent->SetMaterial(1, EyeMaterial);
+		}
+
+		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < BodyMaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase))
+			{
+				GetMesh()->SetMaterial(MaterialIndex, EyeMaterial);
+			}
 		}
 	}
 
@@ -1525,12 +1546,13 @@ void AWUCharacter::ApplyEquippedItemMeshes()
 		MeshComponent->SetHiddenInGame(!bEnabled, false);
 	};
 
-	SetVisualEnabled(PantsMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::PantsSkirt));
-	SetVisualEnabled(BracersMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Gloves));
-	SetVisualEnabled(ChestOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Shirt));
-	SetVisualEnabled(ChestAddOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::ChestRobes));
-	SetVisualEnabled(BeltOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Belt));
-	SetVisualEnabled(BootsOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Shoes));
+	const bool bShowOutfitVisuals = HasCompleteStarterOutfitVisualsEquipped();
+	SetVisualEnabled(PantsMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::Pants));
+	SetVisualEnabled(BracersMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::Bracers));
+	SetVisualEnabled(ChestOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestOutfit));
+	SetVisualEnabled(ChestAddOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestAddOutfit));
+	SetVisualEnabled(BeltOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::BeltOutfit));
+	SetVisualEnabled(BootsOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::Boots));
 	UpdateMasterBodyVisibilityForEquipment();
 }
 
@@ -1542,18 +1564,48 @@ void AWUCharacter::UpdateMasterBodyVisibilityForEquipment()
 		return;
 	}
 
-	const bool bNeedsBaseTorso =
-		!IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Shirt)
-		|| !IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::ChestRobes)
-		|| !IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::PantsSkirt);
-	BodyMesh->SetVisibility(bNeedsBaseTorso, false);
-	BodyMesh->SetHiddenInGame(!bNeedsBaseTorso, false);
+	const bool bNeedsBaseBody = !HasCompleteStarterOutfitVisualsEquipped();
+	BodyMesh->SetVisibility(bNeedsBaseBody, false);
+	BodyMesh->SetHiddenInGame(!bNeedsBaseBody, false);
+
+	if (HeadMeshComponent)
+	{
+		// The fallback full-body meshes include a head. Showing the separate
+		// modular head at the same time causes face z-fighting in naked/partial
+		// gear states.
+		HeadMeshComponent->SetVisibility(!bNeedsBaseBody, false);
+		HeadMeshComponent->SetHiddenInGame(bNeedsBaseBody, false);
+	}
 }
 
-bool AWUCharacter::IsEquipmentSlotVisualEnabled(EWUEquipmentSlot EquipmentSlot) const
+bool AWUCharacter::HasCompleteStarterOutfitVisualsEquipped() const
 {
-	const int32 EquipmentIndex = FindEquipmentEntryIndex(EquipmentSlot);
-	return EquipmentSlots.IsValidIndex(EquipmentIndex) && EquipmentSlots[EquipmentIndex].bHasItem;
+	// Without per-region body masks, partial outfits cannot safely mix with the
+	// full body fallback. Only the complete starter visual set is shown for now.
+	return IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestOutfit)
+		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestAddOutfit)
+		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::BeltOutfit)
+		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Bracers)
+		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Pants)
+		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Boots);
+}
+
+bool AWUCharacter::IsItemVisualLayerEquipped(EWUItemVisualLayer VisualLayer) const
+{
+	if (VisualLayer == EWUItemVisualLayer::None)
+	{
+		return false;
+	}
+
+	for (const FWUEquipmentSlotEntry& EquipmentEntry : EquipmentSlots)
+	{
+		if (EquipmentEntry.bHasItem && EquipmentEntry.Item.VisualLayer == VisualLayer)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 USkeletalMesh* AWUCharacter::LoadSkeletalMeshForPath(const TCHAR* AssetPath) const
