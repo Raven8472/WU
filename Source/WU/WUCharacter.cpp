@@ -582,6 +582,7 @@ void AWUCharacter::OnRep_CharacterStats()
 
 void AWUCharacter::OnRep_InventoryChanged()
 {
+	ApplyEquippedItemMeshes();
 }
 
 void AWUCharacter::OnRep_CharacterAppearance()
@@ -717,6 +718,7 @@ bool AWUCharacter::EquipInventorySlot(int32 SlotIndex)
 
 	EquipmentSlots[EquipmentIndex].Item = ItemToEquip;
 	EquipmentSlots[EquipmentIndex].bHasItem = true;
+	ApplyEquippedItemMeshes();
 	ForceNetUpdate();
 	return true;
 }
@@ -747,6 +749,7 @@ bool AWUCharacter::UnequipEquipmentSlot(EWUEquipmentSlot EquipmentSlot)
 	InventorySlots[FreeInventorySlot].bHasItem = true;
 	EquipmentSlots[EquipmentIndex].Item = FWUInventoryItem();
 	EquipmentSlots[EquipmentIndex].bHasItem = false;
+	ApplyEquippedItemMeshes();
 	ForceNetUpdate();
 	return true;
 }
@@ -1035,17 +1038,52 @@ void AWUCharacter::SeedStarterInventory()
 
 	if (bHasAnyItem)
 	{
+		if (!HasAnyEquippedItem())
+		{
+			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_robes"), TEXT("First-Year Robes"), EWUEquipmentSlot::ChestRobes, FLinearColor(0.18f, 0.25f, 0.36f, 1.0f)));
+			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shirt"), TEXT("Linen Shirt"), EWUEquipmentSlot::Shirt, FLinearColor(0.82f, 0.78f, 0.68f, 1.0f)));
+			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_belt"), TEXT("Leather Belt"), EWUEquipmentSlot::Belt, FLinearColor(0.35f, 0.24f, 0.16f, 1.0f)));
+			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_gloves"), TEXT("School Gloves"), EWUEquipmentSlot::Gloves, FLinearColor(0.30f, 0.28f, 0.25f, 1.0f)));
+			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_pants"), TEXT("School Trousers"), EWUEquipmentSlot::PantsSkirt, FLinearColor(0.34f, 0.36f, 0.32f, 1.0f)));
+			EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shoes"), TEXT("School Shoes"), EWUEquipmentSlot::Shoes, FLinearColor(0.22f, 0.18f, 0.14f, 1.0f)));
+		}
 		return;
 	}
 
+	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_robes"), TEXT("First-Year Robes"), EWUEquipmentSlot::ChestRobes, FLinearColor(0.18f, 0.25f, 0.36f, 1.0f)));
+	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shirt"), TEXT("Linen Shirt"), EWUEquipmentSlot::Shirt, FLinearColor(0.82f, 0.78f, 0.68f, 1.0f)));
+	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_belt"), TEXT("Leather Belt"), EWUEquipmentSlot::Belt, FLinearColor(0.35f, 0.24f, 0.16f, 1.0f)));
+	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_gloves"), TEXT("School Gloves"), EWUEquipmentSlot::Gloves, FLinearColor(0.30f, 0.28f, 0.25f, 1.0f)));
+	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_pants"), TEXT("School Trousers"), EWUEquipmentSlot::PantsSkirt, FLinearColor(0.34f, 0.36f, 0.32f, 1.0f)));
+	EquipStarterVisualItem(MakeStarterItem(TEXT("starter_shoes"), TEXT("School Shoes"), EWUEquipmentSlot::Shoes, FLinearColor(0.22f, 0.18f, 0.14f, 1.0f)));
 	AddItemToInventory(MakeStarterItem(TEXT("starter_wand"), TEXT("Holly Wand"), EWUEquipmentSlot::Wand, FLinearColor(0.75f, 0.55f, 0.28f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_robes"), TEXT("First-Year Robes"), EWUEquipmentSlot::ChestRobes, FLinearColor(0.18f, 0.25f, 0.36f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_shirt"), TEXT("Linen Shirt"), EWUEquipmentSlot::Shirt, FLinearColor(0.82f, 0.78f, 0.68f, 1.0f)));
-	AddItemToInventory(MakeStarterItem(TEXT("starter_shoes"), TEXT("School Shoes"), EWUEquipmentSlot::Shoes, FLinearColor(0.22f, 0.18f, 0.14f, 1.0f)));
 	AddItemToInventory(MakeStarterItem(TEXT("starter_hat"), TEXT("Wool Hat"), EWUEquipmentSlot::Hat, FLinearColor(0.32f, 0.27f, 0.22f, 1.0f)));
 	AddItemToInventory(MakeStarterItem(TEXT("starter_ring"), TEXT("Copper Ring"), EWUEquipmentSlot::Ring1, FLinearColor(0.86f, 0.46f, 0.22f, 1.0f)));
 	AddItemToInventory(MakeStarterItem(TEXT("starter_bracelet"), TEXT("Woven Bracelet"), EWUEquipmentSlot::Bracelet1, FLinearColor(0.40f, 0.58f, 0.34f, 1.0f)));
 	AddItemToInventory(MakeStarterItem(TEXT("starter_nicnak"), TEXT("Tiny Nicnak"), EWUEquipmentSlot::Nicnak1, FLinearColor(0.45f, 0.64f, 0.88f, 1.0f)));
+}
+
+void AWUCharacter::EquipStarterVisualItem(const FWUInventoryItem& Item)
+{
+	const int32 EquipmentIndex = FindEquipmentEntryIndex(Item.EquipmentSlot);
+	if (!EquipmentSlots.IsValidIndex(EquipmentIndex) || EquipmentSlots[EquipmentIndex].bHasItem)
+	{
+		return;
+	}
+
+	FWUInventoryItem ItemToEquip = Item;
+	for (FWUInventorySlot& InventorySlot : InventorySlots)
+	{
+		if (InventorySlot.bHasItem && InventorySlot.Item.ItemId == Item.ItemId)
+		{
+			ItemToEquip = InventorySlot.Item;
+			InventorySlot = FWUInventorySlot();
+			break;
+		}
+	}
+
+	EquipmentSlots[EquipmentIndex].Item = ItemToEquip;
+	EquipmentSlots[EquipmentIndex].bHasItem = true;
 }
 
 void AWUCharacter::BeginBackpedal(float Right)
@@ -1193,6 +1231,19 @@ int32 AWUCharacter::FindFirstFreeInventorySlot() const
 	}
 
 	return INDEX_NONE;
+}
+
+bool AWUCharacter::HasAnyEquippedItem() const
+{
+	for (const FWUEquipmentSlotEntry& EquipmentEntry : EquipmentSlots)
+	{
+		if (EquipmentEntry.bHasItem)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 bool AWUCharacter::AddItemToInventory(const FWUInventoryItem& Item)
@@ -1452,6 +1503,57 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 			BeardMeshComponent->SetMaterial(MaterialIndex, HairMaterial);
 		}
 	}
+
+	ApplyEquippedItemMeshes();
+}
+
+void AWUCharacter::ApplyEquippedItemMeshes()
+{
+	if (EquipmentSlots.IsEmpty())
+	{
+		return;
+	}
+
+	const auto SetVisualEnabled = [](USkeletalMeshComponent* MeshComponent, bool bEnabled)
+	{
+		if (!MeshComponent)
+		{
+			return;
+		}
+
+		MeshComponent->SetVisibility(bEnabled, false);
+		MeshComponent->SetHiddenInGame(!bEnabled, false);
+	};
+
+	SetVisualEnabled(PantsMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::PantsSkirt));
+	SetVisualEnabled(BracersMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Gloves));
+	SetVisualEnabled(ChestOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Shirt));
+	SetVisualEnabled(ChestAddOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::ChestRobes));
+	SetVisualEnabled(BeltOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Belt));
+	SetVisualEnabled(BootsOutfitMeshComponent, IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Shoes));
+	UpdateMasterBodyVisibilityForEquipment();
+}
+
+void AWUCharacter::UpdateMasterBodyVisibilityForEquipment()
+{
+	USkeletalMeshComponent* BodyMesh = GetMesh();
+	if (!BodyMesh)
+	{
+		return;
+	}
+
+	const bool bNeedsBaseTorso =
+		!IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::Shirt)
+		|| !IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::ChestRobes)
+		|| !IsEquipmentSlotVisualEnabled(EWUEquipmentSlot::PantsSkirt);
+	BodyMesh->SetVisibility(bNeedsBaseTorso, false);
+	BodyMesh->SetHiddenInGame(!bNeedsBaseTorso, false);
+}
+
+bool AWUCharacter::IsEquipmentSlotVisualEnabled(EWUEquipmentSlot EquipmentSlot) const
+{
+	const int32 EquipmentIndex = FindEquipmentEntryIndex(EquipmentSlot);
+	return EquipmentSlots.IsValidIndex(EquipmentIndex) && EquipmentSlots[EquipmentIndex].bHasItem;
 }
 
 USkeletalMesh* AWUCharacter::LoadSkeletalMeshForPath(const TCHAR* AssetPath) const
