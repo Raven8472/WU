@@ -21,6 +21,7 @@ class UWUExperienceBarWidget;
 class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
 class UWUTargetFrameWidget;
+class UWUZoneNameWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUTargetChangedSignature, AWUCharacter*, NewTarget);
 
@@ -102,6 +103,22 @@ protected:
 	/** Viewport size for the player experience bar. */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
 	FVector2D ExperienceBarViewportSize = FVector2D(560.0f, 26.0f);
+
+	/** Native zone name widget shown beneath the minimap. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	TSubclassOf<UWUZoneNameWidget> ZoneNameWidgetClass;
+
+	/** Pointer to the native zone name widget. */
+	UPROPERTY()
+	TObjectPtr<UWUZoneNameWidget> ZoneNameWidget;
+
+	/** Viewport position for the zone name readout. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D ZoneNameViewportPosition = FVector2D(-24.0f, 218.0f);
+
+	/** Viewport size for the zone name readout. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D ZoneNameViewportSize = FVector2D(280.0f, 30.0f);
 
 	/** Native player chat widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Chat")

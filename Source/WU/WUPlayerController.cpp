@@ -24,6 +24,7 @@
 #include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
 #include "UI/WUTargetFrameWidget.h"
+#include "UI/WUZoneNameWidget.h"
 #include "WU.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
@@ -55,6 +56,7 @@ AWUPlayerController::AWUPlayerController()
 	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
+	ZoneNameWidgetClass = UWUZoneNameWidget::StaticClass();
 }
 
 void AWUPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -121,6 +123,22 @@ void AWUPlayerController::BeginPlay()
 		{
 			ExperienceBarWidget->AddToPlayerScreen(7);
 			ApplyViewportUnitFrameSlot(ExperienceBarWidget, ExperienceBarViewportSize, ExperienceBarViewportPosition, FAnchors(0.5f, 1.0f), FVector2D(0.5f, 1.0f));
+		}
+	}
+
+	if (!ZoneNameWidgetClass)
+	{
+		ZoneNameWidgetClass = UWUZoneNameWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && ZoneNameWidgetClass)
+	{
+		ZoneNameWidget = CreateWidget<UWUZoneNameWidget>(this, ZoneNameWidgetClass);
+
+		if (ZoneNameWidget)
+		{
+			ZoneNameWidget->AddToPlayerScreen(7);
+			ApplyViewportUnitFrameSlot(ZoneNameWidget, ZoneNameViewportSize, ZoneNameViewportPosition, FAnchors(1.0f, 0.0f), FVector2D(1.0f, 0.0f));
 		}
 	}
 

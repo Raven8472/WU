@@ -204,6 +204,22 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Combat")
 	bool bInCombat = false;
 
+	/** Last gameplay zone entered by this character */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentZone, Category = "Zone")
+	FName CurrentZoneId = NAME_None;
+
+	/** Display name for the current gameplay zone */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentZone, Category = "Zone")
+	FString CurrentZoneDisplayName;
+
+	/** Map region associated with the current gameplay zone */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Zone")
+	FName CurrentMapRegionId = NAME_None;
+
+	/** Graveyard actor tag used when releasing from death in the current zone */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Zone")
+	FName CurrentGraveyardTag = NAME_None;
+
 	/** Seconds without dealing or receiving damage before leaving combat */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat", meta = (ClampMin = 0.0f, Units = "s"))
 	float CombatTimeoutSeconds = 10.0f;
@@ -366,6 +382,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	UTexture2D* GetPortraitTexture() const;
 
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	FName GetCurrentZoneId() const;
+
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	FText GetCurrentZoneDisplayName() const;
+
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	FName GetCurrentMapRegionId() const;
+
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	FName GetCurrentGraveyardTag() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Zone")
+	void SetCurrentZone(FName NewZoneId, const FText& NewDisplayName, FName NewMapRegionId, FName NewGraveyardTag);
+
 	/** Returns true if the character is dead */
 	UFUNCTION(BlueprintPure, Category = "Death")
 	bool IsDead() const;
@@ -415,6 +446,9 @@ public:
 
 	UFUNCTION()
 	void OnRep_CharacterAppearance();
+
+	UFUNCTION()
+	void OnRep_CurrentZone();
 
 	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
 	void UpdateDeathStateEffects();

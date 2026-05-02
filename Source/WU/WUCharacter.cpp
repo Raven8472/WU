@@ -184,6 +184,10 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AWUCharacter, DeathLocation);
 	DOREPLIFETIME(AWUCharacter, bHasReleased);
 	DOREPLIFETIME(AWUCharacter, bInCombat);
+	DOREPLIFETIME(AWUCharacter, CurrentZoneId);
+	DOREPLIFETIME(AWUCharacter, CurrentZoneDisplayName);
+	DOREPLIFETIME(AWUCharacter, CurrentMapRegionId);
+	DOREPLIFETIME(AWUCharacter, CurrentGraveyardTag);
 	DOREPLIFETIME(AWUCharacter, BloodStatus);
 	DOREPLIFETIME(AWUCharacter, CharacterLevel);
 	DOREPLIFETIME(AWUCharacter, CharacterExperience);
@@ -630,6 +634,10 @@ void AWUCharacter::OnRep_CharacterAppearance()
 	ApplyCharacterAppearanceMeshes();
 }
 
+void AWUCharacter::OnRep_CurrentZone()
+{
+}
+
 float AWUCharacter::GetHealthPercent() const
 {
 	return MaxHealth > 0.0f ? FMath::Clamp(Health / MaxHealth, 0.0f, 1.0f) : 0.0f;
@@ -891,6 +899,48 @@ void AWUCharacter::SetDisplayName(const FText& NewDisplayName)
 UTexture2D* AWUCharacter::GetPortraitTexture() const
 {
 	return PortraitTexture;
+}
+
+FName AWUCharacter::GetCurrentZoneId() const
+{
+	return CurrentZoneId;
+}
+
+FText AWUCharacter::GetCurrentZoneDisplayName() const
+{
+	return FText::FromString(CurrentZoneDisplayName);
+}
+
+FName AWUCharacter::GetCurrentMapRegionId() const
+{
+	return CurrentMapRegionId;
+}
+
+FName AWUCharacter::GetCurrentGraveyardTag() const
+{
+	return CurrentGraveyardTag;
+}
+
+void AWUCharacter::SetCurrentZone(FName NewZoneId, const FText& NewDisplayName, FName NewMapRegionId, FName NewGraveyardTag)
+{
+	if (!HasAuthority() || NewZoneId.IsNone())
+	{
+		return;
+	}
+
+	if (CurrentZoneId == NewZoneId
+		&& CurrentMapRegionId == NewMapRegionId
+		&& CurrentGraveyardTag == NewGraveyardTag
+		&& CurrentZoneDisplayName == NewDisplayName.ToString())
+	{
+		return;
+	}
+
+	CurrentZoneId = NewZoneId;
+	CurrentZoneDisplayName = NewDisplayName.ToString();
+	CurrentMapRegionId = NewMapRegionId;
+	CurrentGraveyardTag = NewGraveyardTag;
+	ForceNetUpdate();
 }
 
 bool AWUCharacter::IsDead() const
@@ -2200,16 +2250,33 @@ void AWUCharacter::ReleaseToGraveyard()
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 
 	FVector GraveyardLocation = GetActorLocation(); // fallback
+	bool bFoundGraveyard = false;
 
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), FoundActors);
 
-	for (AActor* Actor : FoundActors)
+	if (!CurrentGraveyardTag.IsNone())
 	{
-		if (Actor && Actor->GetName().Contains(TEXT("BP_Graveyard")))
+		for (AActor* Actor : FoundActors)
 		{
-			GraveyardLocation = Actor->GetActorLocation();
-			break;
+			if (Actor && Actor->ActorHasTag(CurrentGraveyardTag))
+			{
+				GraveyardLocation = Actor->GetActorLocation();
+				bFoundGraveyard = true;
+				break;
+			}
+		}
+	}
+
+	if (!bFoundGraveyard)
+	{
+		for (AActor* Actor : FoundActors)
+		{
+			if (Actor && Actor->GetName().Contains(TEXT("BP_Graveyard")))
+			{
+				GraveyardLocation = Actor->GetActorLocation();
+				break;
+			}
 		}
 	}
 
