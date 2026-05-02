@@ -3,6 +3,7 @@
 #include "WUCharacter.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/Engine.h"
+#include "Animation/AnimationAsset.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -210,6 +211,8 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AWUCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AWUCharacter::StopMove);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Canceled, this, &AWUCharacter::StopMove);
 
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
@@ -220,6 +223,7 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 		PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUCharacter::TargetUnderCursorInput);
 		PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AWUCharacter::TargetNextInput);
+		PlayerInputComponent->BindAxisKey(EKeys::MouseWheelAxis, this, &AWUCharacter::ZoomCamera);
 	}
 	else
 	{
@@ -233,10 +237,30 @@ void AWUCharacter::Move(const FInputActionValue& Value)
 	DoMove(MovementVector.X, MovementVector.Y);
 }
 
+void AWUCharacter::StopMove(const FInputActionValue& Value)
+{
+	EndBackpedal();
+}
+
 void AWUCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D LookAxisVector = Value.Get<FVector2D>();
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
+}
+
+void AWUCharacter::ZoomCamera(float AxisValue)
+{
+	if (!CameraBoom || FMath::IsNearlyZero(AxisValue))
+	{
+		return;
+	}
+
+	const float MinLength = FMath::Min(MinCameraBoomLength, MaxCameraBoomLength);
+	const float MaxLength = FMath::Max(MinCameraBoomLength, MaxCameraBoomLength);
+	CameraBoom->TargetArmLength = FMath::Clamp(
+		CameraBoom->TargetArmLength - (AxisValue * MouseWheelZoomStep),
+		MinLength,
+		MaxLength);
 }
 
 void AWUCharacter::TargetUnderCursorInput()
@@ -259,6 +283,18 @@ void AWUCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr)
 	{
+		const bool bWantsBackpedal = Forward < -KINDA_SMALL_NUMBER;
+
+		if (bWantsBackpedal)
+		{
+			BeginBackpedal(Right);
+			AddMovementInput(GetActorForwardVector(), Forward);
+			AddMovementInput(GetActorRightVector(), Right);
+			return;
+		}
+
+		EndBackpedal();
+
 		const FRotator Rotation = GetController()->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
@@ -757,6 +793,57 @@ void AWUCharacter::SeedStarterInventory()
 	AddItemToInventory(MakeStarterItem(TEXT("starter_nicnak"), TEXT("Tiny Nicnak"), EWUEquipmentSlot::Nicnak1, FLinearColor(0.45f, 0.64f, 0.88f, 1.0f)));
 }
 
+void AWUCharacter::BeginBackpedal(float Right)
+{
+	if (!bBackpedaling)
+	{
+		PreBackpedalMaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	}
+
+	bBackpedaling = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(PreBackpedalMaxWalkSpeed, BackpedalMaxWalkSpeed);
+
+	const TCHAR* BackpedalAnimationPath = GetBackpedalAnimationPath(CharacterAppearance.Sex, Right);
+	if (!BackpedalAnimationPath || CurrentBackpedalAnimationPath == BackpedalAnimationPath)
+	{
+		return;
+	}
+
+	if (UAnimationAsset* BackpedalAnimation = LoadAnimationAssetForPath(BackpedalAnimationPath))
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		GetMesh()->PlayAnimation(BackpedalAnimation, true);
+		bBackpedalAnimationActive = true;
+		CurrentBackpedalAnimationPath = BackpedalAnimationPath;
+	}
+}
+
+void AWUCharacter::EndBackpedal()
+{
+	if (bBackpedaling)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = PreBackpedalMaxWalkSpeed;
+	}
+
+	bBackpedaling = false;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+
+	if (!bBackpedalAnimationActive)
+	{
+		return;
+	}
+
+	bBackpedalAnimationActive = false;
+	CurrentBackpedalAnimationPath.Reset();
+
+	if (UClass* AnimClass = LoadAnimClassForPath(GetAnimationBlueprintPath(CharacterAppearance.Sex)))
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		GetMesh()->SetAnimInstanceClass(AnimClass);
+	}
+}
+
 int32 AWUCharacter::FindEquipmentEntryIndex(EWUEquipmentSlot EquipmentSlot) const
 {
 	for (int32 Index = 0; Index < EquipmentSlots.Num(); ++Index)
@@ -1038,6 +1125,11 @@ UMaterialInterface* AWUCharacter::LoadMaterialForPath(const TCHAR* AssetPath) co
 	return AssetPath ? LoadObject<UMaterialInterface>(nullptr, AssetPath) : nullptr;
 }
 
+UAnimationAsset* AWUCharacter::LoadAnimationAssetForPath(const TCHAR* AssetPath) const
+{
+	return AssetPath ? LoadObject<UAnimationAsset>(nullptr, AssetPath) : nullptr;
+}
+
 UClass* AWUCharacter::LoadAnimClassForPath(const TCHAR* AssetPath) const
 {
 	return AssetPath ? LoadClass<UAnimInstance>(nullptr, AssetPath) : nullptr;
@@ -1212,6 +1304,36 @@ const TCHAR* AWUCharacter::GetAnimationBlueprintPath(EWUCharacterSex Sex) const
 	return Sex == EWUCharacterSex::Female
 		? TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/ABP_Hu_F.ABP_Hu_F_C")
 		: TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/ABP_Hu_M.ABP_Hu_M_C");
+}
+
+const TCHAR* AWUCharacter::GetBackpedalAnimationPath(EWUCharacterSex Sex, float Right) const
+{
+	if (Sex == EWUCharacterSex::Female)
+	{
+		if (Right < -0.2f)
+		{
+			return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Walk_BackwardLeft.A_Hu_F_Walk_BackwardLeft");
+		}
+
+		if (Right > 0.2f)
+		{
+			return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Walk_BackwardRight.A_Hu_F_Walk_BackwardRight");
+		}
+
+		return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Walk_Backwards.A_Hu_F_Walk_Backwards");
+	}
+
+	if (Right < -0.2f)
+	{
+		return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_BackwardLeft.A_Hu_M_Walk_BackwardLeft");
+	}
+
+	if (Right > 0.2f)
+	{
+		return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_BackwardRight.A_Hu_M_Walk_BackwardRight");
+	}
+
+	return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_Backwards.A_Hu_M_Walk_Backwards");
 }
 
 const TCHAR* AWUCharacter::GetPantsMeshPath(EWUCharacterSex Sex) const

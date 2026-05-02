@@ -20,27 +20,47 @@ AWUCharacterCreatorPreviewActor::AWUCharacterCreatorPreviewActor()
 
 	HeadMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("HeadMesh"));
 	HeadMeshComponent->SetupAttachment(BodyMeshComponent);
-	HeadMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HeadMeshComponent->SetGenerateOverlapEvents(false);
-	HeadMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+	ConfigureModularMeshComponent(HeadMeshComponent);
 
 	HairMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("HairMesh"));
 	HairMeshComponent->SetupAttachment(BodyMeshComponent);
-	HairMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HairMeshComponent->SetGenerateOverlapEvents(false);
-	HairMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+	ConfigureModularMeshComponent(HairMeshComponent);
 
 	BrowsMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BrowsMesh"));
 	BrowsMeshComponent->SetupAttachment(BodyMeshComponent);
-	BrowsMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	BrowsMeshComponent->SetGenerateOverlapEvents(false);
-	BrowsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+	ConfigureModularMeshComponent(BrowsMeshComponent);
 
 	BeardMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BeardMesh"));
 	BeardMeshComponent->SetupAttachment(BodyMeshComponent);
-	BeardMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	BeardMeshComponent->SetGenerateOverlapEvents(false);
-	BeardMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+	ConfigureModularMeshComponent(BeardMeshComponent);
+
+	PantsMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("PantsMesh"));
+	PantsMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(PantsMeshComponent);
+
+	HandsMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("HandsMesh"));
+	HandsMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(HandsMeshComponent);
+
+	BracersMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BracersMesh"));
+	BracersMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(BracersMeshComponent);
+
+	ChestOutfitMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ChestOutfitMesh"));
+	ChestOutfitMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(ChestOutfitMeshComponent);
+
+	ChestAddOutfitMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ChestAddOutfitMesh"));
+	ChestAddOutfitMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(ChestAddOutfitMeshComponent);
+
+	BeltOutfitMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BeltOutfitMesh"));
+	BeltOutfitMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(BeltOutfitMeshComponent);
+
+	BootsOutfitMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BootsOutfitMesh"));
+	BootsOutfitMeshComponent->SetupAttachment(BodyMeshComponent);
+	ConfigureModularMeshComponent(BootsOutfitMeshComponent);
 }
 
 void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreateRequest& Request)
@@ -50,44 +70,119 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 		BodyMeshComponent->SetSkeletalMesh(BodyMesh);
 	}
 
+	BodyMeshComponent->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	BodyMeshComponent->SetVisibility(false, false);
+	BodyMeshComponent->SetHiddenInGame(true, false);
+
+	const auto ShowModularMesh = [](USkeletalMeshComponent* MeshComponent)
+	{
+		if (!MeshComponent)
+		{
+			return;
+		}
+
+		MeshComponent->SetVisibility(true, false);
+		MeshComponent->SetHiddenInGame(false, false);
+	};
+
+	const auto HideModularMesh = [](USkeletalMeshComponent* MeshComponent)
+	{
+		if (!MeshComponent)
+		{
+			return;
+		}
+
+		MeshComponent->SetVisibility(false, false);
+		MeshComponent->SetHiddenInGame(true, false);
+	};
+
 	if (USkeletalMesh* HeadMesh = LoadSkeletalMeshForPath(GetHeadMeshPath(Request.Sex)))
 	{
 		HeadMeshComponent->SetSkeletalMesh(HeadMesh);
 		HeadMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		HeadMeshComponent->SetVisibility(true);
+		ShowModularMesh(HeadMeshComponent);
 	}
 
 	if (USkeletalMesh* HairMesh = LoadSkeletalMeshForPath(GetHairMeshPath(Request.Sex, Request.HairStyleIndex)))
 	{
 		HairMeshComponent->SetSkeletalMesh(HairMesh);
 		HairMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		HairMeshComponent->SetVisibility(true);
+		ShowModularMesh(HairMeshComponent);
 	}
 	else
 	{
-		HairMeshComponent->SetVisibility(false);
+		HideModularMesh(HairMeshComponent);
 	}
 
 	if (USkeletalMesh* BrowsMesh = LoadSkeletalMeshForPath(GetBrowsMeshPath(Request.Sex, Request.BrowStyleIndex)))
 	{
 		BrowsMeshComponent->SetSkeletalMesh(BrowsMesh);
 		BrowsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		BrowsMeshComponent->SetVisibility(true);
+		ShowModularMesh(BrowsMeshComponent);
 	}
 	else
 	{
-		BrowsMeshComponent->SetVisibility(false);
+		HideModularMesh(BrowsMeshComponent);
 	}
 
 	if (USkeletalMesh* BeardMesh = LoadSkeletalMeshForPath(GetBeardMeshPath(Request.Sex, Request.BeardStyleIndex)))
 	{
 		BeardMeshComponent->SetSkeletalMesh(BeardMesh);
 		BeardMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		BeardMeshComponent->SetVisibility(true);
+		ShowModularMesh(BeardMeshComponent);
 	}
 	else
 	{
-		BeardMeshComponent->SetVisibility(false);
+		HideModularMesh(BeardMeshComponent);
+	}
+
+	if (USkeletalMesh* PantsMesh = LoadSkeletalMeshForPath(GetPantsMeshPath(Request.Sex)))
+	{
+		PantsMeshComponent->SetSkeletalMesh(PantsMesh);
+		PantsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(PantsMeshComponent);
+	}
+
+	if (USkeletalMesh* HandsMesh = LoadSkeletalMeshForPath(GetHandsMeshPath(Request.Sex)))
+	{
+		HandsMeshComponent->SetSkeletalMesh(HandsMesh);
+		HandsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(HandsMeshComponent);
+	}
+
+	if (USkeletalMesh* BracersMesh = LoadSkeletalMeshForPath(GetBracersMeshPath(Request.Sex)))
+	{
+		BracersMeshComponent->SetSkeletalMesh(BracersMesh);
+		BracersMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(BracersMeshComponent);
+	}
+
+	if (USkeletalMesh* ChestOutfitMesh = LoadSkeletalMeshForPath(GetStarterChestOutfitMeshPath(Request.Sex)))
+	{
+		ChestOutfitMeshComponent->SetSkeletalMesh(ChestOutfitMesh);
+		ChestOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(ChestOutfitMeshComponent);
+	}
+
+	if (USkeletalMesh* ChestAddOutfitMesh = LoadSkeletalMeshForPath(GetStarterChestAddOutfitMeshPath(Request.Sex)))
+	{
+		ChestAddOutfitMeshComponent->SetSkeletalMesh(ChestAddOutfitMesh);
+		ChestAddOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(ChestAddOutfitMeshComponent);
+	}
+
+	if (USkeletalMesh* BeltOutfitMesh = LoadSkeletalMeshForPath(GetStarterBeltOutfitMeshPath(Request.Sex)))
+	{
+		BeltOutfitMeshComponent->SetSkeletalMesh(BeltOutfitMesh);
+		BeltOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(BeltOutfitMeshComponent);
+	}
+
+	if (USkeletalMesh* BootsOutfitMesh = LoadSkeletalMeshForPath(GetStarterBootsOutfitMeshPath(Request.Sex)))
+	{
+		BootsOutfitMeshComponent->SetSkeletalMesh(BootsOutfitMesh);
+		BootsOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
+		ShowModularMesh(BootsOutfitMeshComponent);
 	}
 
 	if (UMaterialInterface* BodyMaterial = LoadMaterialForPath(GetBodyMaterialPath(Request.Sex, Request.SkinPresetIndex)))
@@ -96,6 +191,24 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
 		{
 			BodyMeshComponent->SetMaterial(MaterialIndex, BodyMaterial);
+		}
+
+		const int32 HandsMaterialCount = HandsMeshComponent->GetNumMaterials();
+		for (int32 MaterialIndex = 0; MaterialIndex < HandsMaterialCount; ++MaterialIndex)
+		{
+			HandsMeshComponent->SetMaterial(MaterialIndex, BodyMaterial);
+		}
+
+		const int32 BracersMaterialCount = BracersMeshComponent->GetNumMaterials();
+		for (int32 MaterialIndex = 0; MaterialIndex < BracersMaterialCount; ++MaterialIndex)
+		{
+			BracersMeshComponent->SetMaterial(MaterialIndex, BodyMaterial);
+		}
+
+		const int32 ChestBodyMaterialIndex = ChestOutfitMeshComponent->GetMaterialIndex(TEXT("M_Body"));
+		if (ChestBodyMaterialIndex != INDEX_NONE)
+		{
+			ChestOutfitMeshComponent->SetMaterial(ChestBodyMaterialIndex, BodyMaterial);
 		}
 	}
 
@@ -167,6 +280,18 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 void AWUCharacterCreatorPreviewActor::RotatePreview(float YawDelta)
 {
 	AddActorLocalRotation(FRotator(0.0f, YawDelta, 0.0f));
+}
+
+void AWUCharacterCreatorPreviewActor::ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const
+{
+	if (!MeshComponent)
+	{
+		return;
+	}
+
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshComponent->SetGenerateOverlapEvents(false);
+	MeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
 }
 
 USkeletalMesh* AWUCharacterCreatorPreviewActor::LoadSkeletalMeshForPath(const TCHAR* AssetPath) const
@@ -271,20 +396,73 @@ const TCHAR* AWUCharacterCreatorPreviewActor::GetBeardMeshPath(EWUCharacterSex S
 	return MaleBeardPaths[NormalizeIndex(BeardStyleIndex - 1, UE_ARRAY_COUNT(MaleBeardPaths))];
 }
 
+const TCHAR* AWUCharacterCreatorPreviewActor::GetPantsMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Pants.SK_Hu_F_Pants")
+		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Pants.SK_Hu_M_Pants");
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetHandsMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Hands.SK_Hu_F_Hands")
+		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Hands.SK_Hu_M_Hands");
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetBracersMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Bracers.SK_Hu_F_Bracers")
+		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Bracers.SK_Hu_M_Bracers");
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetStarterChestOutfitMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Chest/SK_Hu_F_Chest_Peasant_01.SK_Hu_F_Chest_Peasant_01")
+		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Chest/SK_Hu_M_Chest_Peasant_01.SK_Hu_M_Chest_Peasant_01");
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetStarterChestAddOutfitMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/ChestAdd/SK_Hu_F_ChestAdd_Peasant.SK_Hu_F_ChestAdd_Peasant")
+		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/ChestAdd/SK_Hu_M_ChestAdd_Peasant.SK_Hu_M_ChestAdd_Peasant");
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetStarterBeltOutfitMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Belt/SK_Hu_F_Belt_Peasant.SK_Hu_F_Belt_Peasant")
+		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Belt/SK_Hu_M_Belt_Peasant.SK_Hu_M_Belt_Peasant");
+}
+
+const TCHAR* AWUCharacterCreatorPreviewActor::GetStarterBootsOutfitMeshPath(EWUCharacterSex Sex) const
+{
+	return Sex == EWUCharacterSex::Female
+		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Boots/SK_Hu_F_Boots_Peasant.SK_Hu_F_Boots_Peasant")
+		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Boots/SK_Hu_M_Boots_Peasant.SK_Hu_M_Boots_Peasant");
+}
+
 const TCHAR* AWUCharacterCreatorPreviewActor::GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const
 {
 	static const TCHAR* FemaleBodyMaterialPaths[] =
 	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/Presets/MI_Hu_F_Body_Peasant_Bl.MI_Hu_F_Body_Peasant_Bl"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/Presets/MI_Hu_F_Body_Peasant_Br.MI_Hu_F_Body_Peasant_Br"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/Presets/MI_Hu_F_Body_Peasant_Rd.MI_Hu_F_Body_Peasant_Rd")
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_01.MI_Hu_F_Body_01"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_02.MI_Hu_F_Body_02"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_03.MI_Hu_F_Body_03"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_04.MI_Hu_F_Body_04"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_05.MI_Hu_F_Body_05")
 	};
 
 	static const TCHAR* MaleBodyMaterialPaths[] =
 	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/Presets/MI_Hu_M_Body_Peasant_Bl.MI_Hu_M_Body_Peasant_Bl"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/Presets/MI_Hu_M_Body_Peasant_Br.MI_Hu_M_Body_Peasant_Br"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/Presets/MI_Hu_M_Body_Peasant_Rd.MI_Hu_M_Body_Peasant_Rd")
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_01.MI_Hu_M_Body_01"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_02.MI_Hu_M_Body_02"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_03.MI_Hu_M_Body_03"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_04.MI_Hu_M_Body_04"),
+		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_05.MI_Hu_M_Body_05")
 	};
 
 	if (Sex == EWUCharacterSex::Female)

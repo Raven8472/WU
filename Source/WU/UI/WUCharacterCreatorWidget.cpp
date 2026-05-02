@@ -174,21 +174,6 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
 				[
 					CreateStepperRow(
-						LOCTEXT("HeadPreset", "Head"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							return FText::Format(LOCTEXT("HeadValue", "Preset {0}"), FText::AsNumber(CurrentRequest.HeadPresetIndex + 1));
-						}),
-						[this]() { CycleHeadPreset(-1); },
-						[this]() { CycleHeadPreset(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
 						LOCTEXT("HairStyle", "Hair"),
 						TAttribute<FText>::CreateLambda([this]()
 						{
@@ -345,6 +330,8 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 
 void UWUCharacterCreatorWidget::ShowCreator()
 {
+	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex, 0, 4);
+	CurrentRequest.HeadPresetIndex = CurrentRequest.SkinPresetIndex;
 	bCreatorOpen = true;
 	RefreshPreview();
 	InvalidateLayoutAndVolatility();
@@ -352,8 +339,14 @@ void UWUCharacterCreatorWidget::ShowCreator()
 
 void UWUCharacterCreatorWidget::HideCreator()
 {
+	const bool bWasOpen = bCreatorOpen;
 	bCreatorOpen = false;
 	InvalidateLayoutAndVolatility();
+
+	if (bWasOpen)
+	{
+		OnCreatorClosed.Broadcast();
+	}
 }
 
 void UWUCharacterCreatorWidget::ToggleCreator()
@@ -399,6 +392,8 @@ void UWUCharacterCreatorWidget::SetRace(EWUCharacterRace NewRace)
 void UWUCharacterCreatorWidget::SetSex(EWUCharacterSex NewSex)
 {
 	CurrentRequest.Sex = NewSex;
+	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex, 0, 4);
+	CurrentRequest.HeadPresetIndex = CurrentRequest.SkinPresetIndex;
 	CurrentRequest.HairStyleIndex = 0;
 	CurrentRequest.BrowStyleIndex = 0;
 	CurrentRequest.BeardStyleIndex = 0;
@@ -407,13 +402,8 @@ void UWUCharacterCreatorWidget::SetSex(EWUCharacterSex NewSex)
 
 void UWUCharacterCreatorWidget::CycleSkinPreset(int32 Delta)
 {
-	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex + Delta, 0, 2);
-	RefreshPreview();
-}
-
-void UWUCharacterCreatorWidget::CycleHeadPreset(int32 Delta)
-{
-	CurrentRequest.HeadPresetIndex = FMath::Clamp(CurrentRequest.HeadPresetIndex + Delta, 0, 4);
+	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex + Delta, 0, 4);
+	CurrentRequest.HeadPresetIndex = CurrentRequest.SkinPresetIndex;
 	RefreshPreview();
 }
 
@@ -476,6 +466,9 @@ void UWUCharacterCreatorWidget::RotatePreview(float YawDelta) const
 
 void UWUCharacterCreatorWidget::SubmitCreateRequest()
 {
+	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex, 0, 4);
+	CurrentRequest.HeadPresetIndex = CurrentRequest.SkinPresetIndex;
+
 	if (OnCreateRequested.IsBound())
 	{
 		OnCreateRequested.Broadcast(CurrentRequest);

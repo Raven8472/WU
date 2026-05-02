@@ -12,6 +12,7 @@ class SEditableTextBox;
 class UTexture2D;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUCharacterCreateRequestedSignature, const FWUCharacterCreateRequest&, Request);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUCharacterCreatorClosedSignature);
 
 /**
  * Native character creator shell.
@@ -28,6 +29,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Character Creation")
 	FWUCharacterCreateRequestedSignature OnCreateRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "Character Creation")
+	FWUCharacterCreatorClosedSignature OnCreatorClosed;
 
 	UFUNCTION(BlueprintCallable, Category = "Character Creation")
 	void ShowCreator();
@@ -70,7 +74,6 @@ private:
 	void SetRace(EWUCharacterRace NewRace);
 	void SetSex(EWUCharacterSex NewSex);
 	void CycleSkinPreset(int32 Delta);
-	void CycleHeadPreset(int32 Delta);
 	void CycleHairStyle(int32 Delta);
 	void CycleHairColor(int32 Delta);
 	void CycleEyeColor(int32 Delta);

@@ -13,6 +13,11 @@ public sealed class CharacterCreationService(ICharacterRepository repository)
         }
 
         var normalizedName = CharacterNameRules.Normalize(request.Name);
+        var appearance = request.Appearance! with
+        {
+            HeadPresetIndex = request.Appearance.SkinPresetIndex
+        };
+
         var command = new CreateCharacterCommand(
             request.AccountId,
             request.RealmId,
@@ -20,7 +25,7 @@ public sealed class CharacterCreationService(ICharacterRepository repository)
             normalizedName,
             request.Race,
             request.Sex,
-            request.Appearance!);
+            appearance);
 
         try
         {

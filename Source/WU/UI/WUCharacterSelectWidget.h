@@ -59,6 +59,9 @@ private:
 	UFUNCTION()
 	void HandleCreatorCreateRequested(const FWUCharacterCreateRequest& Request);
 
+	UFUNCTION()
+	void HandleCreatorClosed();
+
 	FReply HandleCreateClicked();
 	FReply HandleRefreshClicked();
 	FReply HandleSelectClicked(FString CharacterId);
@@ -70,6 +73,9 @@ private:
 	TSharedRef<SWidget> CreateCharacterPreviewPanel();
 	void RefreshCharacterRows();
 	TSharedRef<SWidget> CreateCharacterRow(const FWUBackendCharacterSummary& Character);
+	void PreviewSelectedCharacter();
+	void PreviewCharacter(const FWUBackendCharacterSummary& Character);
+	bool ShouldShowCharacterPreview() const;
 	UTexture* ResolvePreviewTexture() const;
 	UTexture2D* ResolveBackgroundTexture();
 
@@ -79,6 +85,7 @@ private:
 	FSlateBrush PreviewBrush;
 	FText StatusText;
 	TSharedPtr<SVerticalBox> CharacterListBox;
+	bool bHasSelectedCharacterPreview = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWUCharacterCreatorWidget> CharacterCreatorWidget;

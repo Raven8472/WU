@@ -202,7 +202,7 @@ void AWULoginPlayerController::SetupCharacterCreatorPreviewRig()
 	{
 		CharacterCreatorPreviewRenderTarget = NewObject<UTextureRenderTarget2D>(this, TEXT("CharacterCreatorPreviewRenderTarget"));
 		CharacterCreatorPreviewRenderTarget->ClearColor = FLinearColor(0.015f, 0.012f, 0.01f, 1.0f);
-		CharacterCreatorPreviewRenderTarget->InitAutoFormat(512, 768);
+		CharacterCreatorPreviewRenderTarget->InitAutoFormat(768, 1024);
 		CharacterCreatorPreviewRenderTarget->UpdateResourceImmediate(true);
 	}
 
@@ -227,7 +227,7 @@ void AWULoginPlayerController::SetupCharacterCreatorPreviewRig()
 		CaptureComponent->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 		CaptureComponent->bCaptureEveryFrame = true;
 		CaptureComponent->bCaptureOnMovement = true;
-		CaptureComponent->FOVAngle = 32.0f;
+		CaptureComponent->FOVAngle = 30.0f;
 		CaptureComponent->ShowFlags.SetLighting(false);
 		CaptureComponent->ShowFlags.SetFog(false);
 		CaptureComponent->ShowFlags.SetAtmosphere(false);
@@ -271,7 +271,7 @@ void AWULoginPlayerController::PositionCharacterCreatorPreviewCapture()
 	}
 
 	const FVector PreviewLocation = FVector(100000.0f, 100000.0f, 100.0f);
-	const FVector CameraLocation = PreviewLocation + FVector(260.0f, -530.0f, 150.0f);
+	const FVector CameraLocation = PreviewLocation + FVector(230.0f, -470.0f, 145.0f);
 	const FVector LookAtLocation = PreviewLocation + FVector(0.0f, 0.0f, 92.0f);
 
 	CharacterCreatorSceneCaptureActor->SetActorLocation(CameraLocation);

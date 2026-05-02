@@ -13,6 +13,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UAnimationAsset;
 class UMaterialInterface;
 class USkeletalMesh;
 class USkeletalMeshComponent;
@@ -57,6 +58,18 @@ protected:
 	/** Mouse Look Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* MouseLookAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = 100.0f, Units = "cm"))
+	float MinCameraBoomLength = 250.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = 100.0f, Units = "cm"))
+	float MaxCameraBoomLength = 750.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = 1.0f, Units = "cm"))
+	float MouseWheelZoomStep = 60.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 1.0f, Units = "cm/s"))
+	float BackpedalMaxWalkSpeed = 200.0f;
 
 	/** Attack Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -368,6 +381,8 @@ public:
 	void RegenerateResources(float DeltaSeconds);
 	void InitializeInventoryStorage();
 	void SeedStarterInventory();
+	void BeginBackpedal(float Right);
+	void EndBackpedal();
 	int32 FindEquipmentEntryIndex(EWUEquipmentSlot EquipmentSlot) const;
 	int32 FindFirstFreeInventorySlot() const;
 	bool AddItemToInventory(const FWUInventoryItem& Item);
@@ -375,6 +390,7 @@ public:
 	void ApplyCharacterAppearanceMeshes();
 	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
 	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
+	UAnimationAsset* LoadAnimationAssetForPath(const TCHAR* AssetPath) const;
 	UClass* LoadAnimClassForPath(const TCHAR* AssetPath) const;
 	const TCHAR* GetBodyMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetHeadMeshPath(EWUCharacterSex Sex) const;
@@ -386,6 +402,7 @@ public:
 	const TCHAR* GetEyeMaterialPath(int32 EyeColorIndex) const;
 	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
 	const TCHAR* GetAnimationBlueprintPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetBackpedalAnimationPath(EWUCharacterSex Sex, float Right) const;
 	const TCHAR* GetPantsMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetHandsMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetBracersMeshPath(EWUCharacterSex Sex) const;
@@ -413,6 +430,10 @@ protected:
 	virtual void BeginPlay() override;
 
 	float LastCombatEventTimeSeconds = -1000.0f;
+	float PreBackpedalMaxWalkSpeed = 500.0f;
+	bool bBackpedaling = false;
+	bool bBackpedalAnimationActive = false;
+	FString CurrentBackpedalAnimationPath;
 
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -420,8 +441,14 @@ protected:
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
 
+	/** Restores normal movement-facing behavior after movement input ends */
+	void StopMove(const FInputActionValue& Value);
+
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+
+	/** Called for raw mouse-wheel camera zoom input */
+	void ZoomCamera(float AxisValue);
 
 	/** Fallback target-select input routed through the possessed pawn input component */
 	void TargetUnderCursorInput();

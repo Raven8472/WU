@@ -53,6 +53,7 @@ void UWUCharacterSelectWidget::NativeConstruct()
 		Session->OnCharacterDeleted.AddDynamic(this, &UWUCharacterSelectWidget::HandleCharacterDeleted);
 		Session->OnRequestFailed.AddDynamic(this, &UWUCharacterSelectWidget::HandleRequestFailed);
 		RefreshCharacterRows();
+		PreviewSelectedCharacter();
 	}
 }
 
@@ -61,6 +62,7 @@ void UWUCharacterSelectWidget::NativeDestruct()
 	if (CharacterCreatorWidget)
 	{
 		CharacterCreatorWidget->OnCreateRequested.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleCreatorCreateRequested);
+		CharacterCreatorWidget->OnCreatorClosed.RemoveDynamic(this, &UWUCharacterSelectWidget::HandleCreatorClosed);
 	}
 
 	if (UGameInstance* GameInstance = GetGameInstance())
@@ -88,7 +90,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 
 	PreviewBrush.SetResourceObject(ResolvePreviewTexture());
 	PreviewBrush.DrawAs = ESlateBrushDrawType::Image;
-	PreviewBrush.ImageSize = FVector2D(360.0f, 540.0f);
+	PreviewBrush.ImageSize = FVector2D(600.0f, 760.0f);
 
 	TSharedRef<SVerticalBox> CharacterList = SNew(SVerticalBox);
 	CharacterListBox = CharacterList;
@@ -111,7 +113,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 		+ SOverlay::Slot()
 		.HAlign(HAlign_Left)
 		.VAlign(VAlign_Center)
-		.Padding(FMargin(550.0f, 0.0f, 0.0f, 0.0f))
+		.Padding(FMargin(610.0f, 0.0f, 0.0f, 0.0f))
 		[
 			CreateCharacterPreviewPanel()
 		]
@@ -217,6 +219,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 		];
 
 	RefreshCharacterRows();
+	PreviewSelectedCharacter();
 	return Root;
 }
 
@@ -224,6 +227,7 @@ void UWUCharacterSelectWidget::HandleCharactersLoaded(const TArray<FWUBackendCha
 {
 	StatusText = FText::Format(LOCTEXT("CharactersLoaded", "{0} characters loaded"), FText::AsNumber(LoadedCharacters.Num()));
 	RefreshCharacterRows();
+	PreviewSelectedCharacter();
 }
 
 void UWUCharacterSelectWidget::HandleCharacterCreated(const FWUBackendCharacterSummary& Character)
@@ -239,6 +243,7 @@ void UWUCharacterSelectWidget::HandleCharacterDeleted(const FString& CharacterId
 {
 	StatusText = LOCTEXT("CharacterDeleted", "Character deleted");
 	RefreshCharacterRows();
+	PreviewSelectedCharacter();
 }
 
 void UWUCharacterSelectWidget::HandleRequestFailed(const FString& ErrorMessage)
@@ -255,6 +260,8 @@ void UWUCharacterSelectWidget::HandleCreatorCreateRequested(const FWUCharacterCr
 {
 	FWUCharacterCreateRequest SanitizedRequest = Request;
 	SanitizedRequest.CharacterName = Request.CharacterName.TrimStartAndEnd();
+	SanitizedRequest.SkinPresetIndex = FMath::Clamp(SanitizedRequest.SkinPresetIndex, 0, 4);
+	SanitizedRequest.HeadPresetIndex = SanitizedRequest.SkinPresetIndex;
 
 	if (SanitizedRequest.CharacterName.Len() < 3)
 	{
@@ -267,6 +274,11 @@ void UWUCharacterSelectWidget::HandleCreatorCreateRequested(const FWUCharacterCr
 		StatusText = LOCTEXT("CreatingCharacter", "Creating character...");
 		Session->CreateCharacter(SanitizedRequest);
 	}
+}
+
+void UWUCharacterSelectWidget::HandleCreatorClosed()
+{
+	PreviewSelectedCharacter();
 }
 
 FReply UWUCharacterSelectWidget::HandleCreateClicked()
@@ -300,6 +312,7 @@ FReply UWUCharacterSelectWidget::HandleSelectClicked(FString CharacterId)
 		Session->SelectCharacter(CharacterId);
 		StatusText = LOCTEXT("CharacterSelected", "Character selected");
 		RefreshCharacterRows();
+		PreviewSelectedCharacter();
 	}
 
 	return FReply::Handled();
@@ -343,6 +356,7 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterCreatorPanel()
 		if (CharacterCreatorWidget)
 		{
 			CharacterCreatorWidget->OnCreateRequested.AddUniqueDynamic(this, &UWUCharacterSelectWidget::HandleCreatorCreateRequested);
+			CharacterCreatorWidget->OnCreatorClosed.AddUniqueDynamic(this, &UWUCharacterSelectWidget::HandleCreatorClosed);
 		}
 	}
 
@@ -352,11 +366,11 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterCreatorPanel()
 TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterPreviewPanel()
 {
 	return SNew(SBox)
-		.WidthOverride(360.0f)
-		.HeightOverride(540.0f)
+		.WidthOverride(600.0f)
+		.HeightOverride(760.0f)
 		.Visibility_Lambda([this]()
 		{
-			return CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen() && ResolvePreviewTexture()
+			return ShouldShowCharacterPreview()
 				? EVisibility::HitTestInvisible
 				: EVisibility::Collapsed;
 		})
@@ -389,6 +403,7 @@ void UWUCharacterSelectWidget::RefreshCharacterRows()
 	const TArray<FWUBackendCharacterSummary>& SessionCharacters = Session->GetCharacters();
 	if (SessionCharacters.IsEmpty())
 	{
+		bHasSelectedCharacterPreview = false;
 		CharacterListBox->AddSlot()
 		.AutoHeight()
 		[
@@ -467,6 +482,67 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterRow(const FWUBacken
 				]
 			]
 		];
+}
+
+void UWUCharacterSelectWidget::PreviewSelectedCharacter()
+{
+	if (CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen())
+	{
+		return;
+	}
+
+	const UWUClientSessionSubsystem* Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		bHasSelectedCharacterPreview = false;
+		InvalidateLayoutAndVolatility();
+		return;
+	}
+
+	for (const FWUBackendCharacterSummary& Character : Session->GetCharacters())
+	{
+		if (Character.CharacterId == Session->GetSelectedCharacterId())
+		{
+			PreviewCharacter(Character);
+			return;
+		}
+	}
+
+	bHasSelectedCharacterPreview = false;
+	InvalidateLayoutAndVolatility();
+}
+
+void UWUCharacterSelectWidget::PreviewCharacter(const FWUBackendCharacterSummary& Character)
+{
+	AWULoginPlayerController* LoginPC = Cast<AWULoginPlayerController>(GetOwningPlayer());
+	if (!LoginPC)
+	{
+		bHasSelectedCharacterPreview = false;
+		InvalidateLayoutAndVolatility();
+		return;
+	}
+
+	FWUCharacterCreateRequest PreviewRequest;
+	PreviewRequest.CharacterName = Character.Name;
+	PreviewRequest.Race = Character.Race;
+	PreviewRequest.Sex = Character.Sex;
+	PreviewRequest.SkinPresetIndex = FMath::Clamp(Character.Appearance.SkinPresetIndex, 0, 4);
+	PreviewRequest.HeadPresetIndex = FMath::Clamp(Character.Appearance.HeadPresetIndex, 0, 4);
+	PreviewRequest.HairStyleIndex = Character.Appearance.HairStyleIndex;
+	PreviewRequest.HairColorIndex = Character.Appearance.HairColorIndex;
+	PreviewRequest.EyeColorIndex = Character.Appearance.EyeColorIndex;
+	PreviewRequest.BrowStyleIndex = Character.Appearance.BrowStyleIndex;
+	PreviewRequest.BeardStyleIndex = Character.Appearance.BeardStyleIndex;
+
+	LoginPC->PreviewCharacterCreateRequest(PreviewRequest);
+	bHasSelectedCharacterPreview = true;
+	InvalidateLayoutAndVolatility();
+}
+
+bool UWUCharacterSelectWidget::ShouldShowCharacterPreview() const
+{
+	const bool bCreatorPreviewOpen = CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen();
+	return ResolvePreviewTexture() && (bCreatorPreviewOpen || bHasSelectedCharacterPreview);
 }
 
 UTexture* UWUCharacterSelectWidget::ResolvePreviewTexture() const
