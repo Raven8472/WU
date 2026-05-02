@@ -1613,13 +1613,12 @@ void AWUCharacter::ApplyEquippedItemMeshes()
 		MeshComponent->SetHiddenInGame(!bEnabled, false);
 	};
 
-	const bool bShowOutfitVisuals = HasCompleteStarterOutfitVisualsEquipped();
-	SetVisualEnabled(PantsMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::Pants));
-	SetVisualEnabled(BracersMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::Bracers));
-	SetVisualEnabled(ChestOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestOutfit));
-	SetVisualEnabled(ChestAddOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestAddOutfit));
-	SetVisualEnabled(BeltOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::BeltOutfit));
-	SetVisualEnabled(BootsOutfitMeshComponent, bShowOutfitVisuals && IsItemVisualLayerEquipped(EWUItemVisualLayer::Boots));
+	SetVisualEnabled(PantsMeshComponent, IsItemVisualLayerRenderable(EWUItemVisualLayer::Pants));
+	SetVisualEnabled(BracersMeshComponent, IsItemVisualLayerRenderable(EWUItemVisualLayer::Bracers));
+	SetVisualEnabled(ChestOutfitMeshComponent, IsItemVisualLayerRenderable(EWUItemVisualLayer::ChestOutfit));
+	SetVisualEnabled(ChestAddOutfitMeshComponent, IsItemVisualLayerRenderable(EWUItemVisualLayer::ChestAddOutfit));
+	SetVisualEnabled(BeltOutfitMeshComponent, IsItemVisualLayerRenderable(EWUItemVisualLayer::BeltOutfit));
+	SetVisualEnabled(BootsOutfitMeshComponent, IsItemVisualLayerRenderable(EWUItemVisualLayer::Boots));
 	UpdateMasterBodyVisibilityForEquipment();
 }
 
@@ -1631,7 +1630,7 @@ void AWUCharacter::UpdateMasterBodyVisibilityForEquipment()
 		return;
 	}
 
-	const bool bNeedsBaseBody = !HasCompleteStarterOutfitVisualsEquipped();
+	const bool bNeedsBaseBody = !HasRenderedFullBodyReplacementVisuals();
 	BodyMesh->SetVisibility(bNeedsBaseBody, false);
 	BodyMesh->SetHiddenInGame(!bNeedsBaseBody, false);
 
@@ -1645,16 +1644,10 @@ void AWUCharacter::UpdateMasterBodyVisibilityForEquipment()
 	}
 }
 
-bool AWUCharacter::HasCompleteStarterOutfitVisualsEquipped() const
+bool AWUCharacter::HasRenderedFullBodyReplacementVisuals() const
 {
-	// Without per-region body masks, partial outfits cannot safely mix with the
-	// full body fallback. Only the complete starter visual set is shown for now.
-	return IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestOutfit)
-		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestAddOutfit)
-		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::BeltOutfit)
-		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Bracers)
-		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Pants)
-		&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Boots);
+	return IsItemVisualLayerRenderable(EWUItemVisualLayer::ChestOutfit)
+		&& IsItemVisualLayerRenderable(EWUItemVisualLayer::Pants);
 }
 
 bool AWUCharacter::IsItemVisualLayerEquipped(EWUItemVisualLayer VisualLayer) const
@@ -1673,6 +1666,32 @@ bool AWUCharacter::IsItemVisualLayerEquipped(EWUItemVisualLayer VisualLayer) con
 	}
 
 	return false;
+}
+
+bool AWUCharacter::IsItemVisualLayerRenderable(EWUItemVisualLayer VisualLayer) const
+{
+	if (!IsItemVisualLayerEquipped(VisualLayer))
+	{
+		return false;
+	}
+
+	switch (VisualLayer)
+	{
+	case EWUItemVisualLayer::None:
+		return false;
+	case EWUItemVisualLayer::ChestOutfit:
+		return true;
+	case EWUItemVisualLayer::ChestAddOutfit:
+	case EWUItemVisualLayer::Bracers:
+	case EWUItemVisualLayer::Pants:
+		return IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestOutfit);
+	case EWUItemVisualLayer::BeltOutfit:
+	case EWUItemVisualLayer::Boots:
+		return IsItemVisualLayerEquipped(EWUItemVisualLayer::ChestOutfit)
+			&& IsItemVisualLayerEquipped(EWUItemVisualLayer::Pants);
+	default:
+		return false;
+	}
 }
 
 USkeletalMesh* AWUCharacter::LoadSkeletalMeshForPath(const TCHAR* AssetPath) const

@@ -436,8 +436,9 @@ public:
 	void ApplyCharacterAppearanceMeshes();
 	void ApplyEquippedItemMeshes();
 	void UpdateMasterBodyVisibilityForEquipment();
-	bool HasCompleteStarterOutfitVisualsEquipped() const;
+	bool HasRenderedFullBodyReplacementVisuals() const;
 	bool IsItemVisualLayerEquipped(EWUItemVisualLayer VisualLayer) const;
+	bool IsItemVisualLayerRenderable(EWUItemVisualLayer VisualLayer) const;
 	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
 	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
 	UAnimationAsset* LoadAnimationAssetForPath(const TCHAR* AssetPath) const;
