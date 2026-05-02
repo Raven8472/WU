@@ -20,6 +20,7 @@
 #include "UI/WUCharacterCreatorWidget.h"
 #include "UI/WUCharacterPanelWidget.h"
 #include "UI/WUChatWidget.h"
+#include "UI/WUExperienceBarWidget.h"
 #include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
 #include "UI/WUTargetFrameWidget.h"
@@ -50,6 +51,7 @@ AWUPlayerController::AWUPlayerController()
 	CharacterCreatorPreviewActorClass = AWUCharacterCreatorPreviewActor::StaticClass();
 	CharacterPanelWidgetClass = UWUCharacterPanelWidget::StaticClass();
 	ChatWidgetClass = UWUChatWidget::StaticClass();
+	ExperienceBarWidgetClass = UWUExperienceBarWidget::StaticClass();
 	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
@@ -104,6 +106,22 @@ void AWUPlayerController::BeginPlay()
 	if (!ChatWidgetClass)
 	{
 		ChatWidgetClass = UWUChatWidget::StaticClass();
+	}
+
+	if (!ExperienceBarWidgetClass)
+	{
+		ExperienceBarWidgetClass = UWUExperienceBarWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && ExperienceBarWidgetClass)
+	{
+		ExperienceBarWidget = CreateWidget<UWUExperienceBarWidget>(this, ExperienceBarWidgetClass);
+
+		if (ExperienceBarWidget)
+		{
+			ExperienceBarWidget->AddToPlayerScreen(7);
+			ApplyViewportUnitFrameSlot(ExperienceBarWidget, ExperienceBarViewportSize, ExperienceBarViewportPosition, FAnchors(0.5f, 1.0f), FVector2D(0.5f, 1.0f));
+		}
 	}
 
 	if (IsLocalPlayerController() && ChatWidgetClass)
@@ -279,20 +297,10 @@ void AWUPlayerController::SetupInputComponent()
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
 	{
-		if (ClickTargetAction)
-		{
-			EnhancedInputComponent->BindAction(ClickTargetAction, ETriggerEvent::Started, this, &AWUPlayerController::TargetUnderCursor);
-		}
-
 		if (TabTargetAction)
 		{
 			EnhancedInputComponent->BindAction(TabTargetAction, ETriggerEvent::Started, this, &AWUPlayerController::TargetNextCharacter);
 		}
-	}
-
-	if (!ClickTargetAction)
-	{
-		InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUPlayerController::TargetUnderCursor);
 	}
 
 	if (!TabTargetAction)
@@ -1200,6 +1208,14 @@ void AWUPlayerController::ApplyUIInputMode()
 	InputMode.SetHideCursorDuringCapture(false);
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
+}
+
+bool AWUPlayerController::HasInteractiveOverlayOpen() const
+{
+	return IsChatInputOpen()
+		|| IsInventoryOpen()
+		|| IsCharacterPanelOpen()
+		|| IsCharacterCreatorOpen();
 }
 
 bool AWUPlayerController::IsSelectableTarget(const AWUCharacter* Candidate) const

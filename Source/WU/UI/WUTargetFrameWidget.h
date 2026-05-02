@@ -74,6 +74,7 @@ protected:
 
 	bool HasTarget() const;
 	FText GetTargetNameText() const;
+	FText GetLevelText() const;
 	FText GetHealthText() const;
 	FText GetMagicText() const;
 	FText GetFallbackPortraitText() const;

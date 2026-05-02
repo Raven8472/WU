@@ -71,6 +71,24 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 1.0f, Units = "cm/s"))
 	float BackpedalMaxWalkSpeed = 200.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 1.0f, Units = "deg/s"))
+	float KeyboardTurnRateDegreesPerSecond = 185.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 1.0f, Units = "deg/s"))
+	float MouseFacingTurnRateDegreesPerSecond = 180.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 0.0f, Units = "deg"))
+	float TurnInPlaceActivationAngleDegrees = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 0.0f, Units = "s"))
+	float TurnInPlaceAnimationMinSeconds = 0.32f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = 0.1f, ClampMax = 2.0f))
+	float TurnInPlaceAnimationPlayRate = 0.85f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (ClampMin = 0.0))
+	float ClickTargetDragThreshold = 2.0f;
+
 	/** Attack Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* AttackAction;
@@ -428,6 +446,7 @@ public:
 	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
 	const TCHAR* GetAnimationBlueprintPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetBackpedalAnimationPath(EWUCharacterSex Sex, float Right) const;
+	const TCHAR* GetTurnInPlaceAnimationPath(EWUCharacterSex Sex, float YawDeltaDegrees) const;
 	const TCHAR* GetPantsMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetHandsMeshPath(EWUCharacterSex Sex) const;
 	const TCHAR* GetBracersMeshPath(EWUCharacterSex Sex) const;
@@ -459,9 +478,18 @@ protected:
 
 	float LastCombatEventTimeSeconds = -1000.0f;
 	float PreBackpedalMaxWalkSpeed = 500.0f;
+	float DefaultRotationRateDegreesPerSecond = 500.0f;
+	float PendingLeftClickDragDistance = 0.0f;
+	float TurnInPlaceAnimationHoldUntilSeconds = 0.0f;
 	bool bBackpedaling = false;
 	bool bBackpedalAnimationActive = false;
+	bool bTurnInPlaceAnimationActive = false;
+	bool bKeyboardTurnInPlaceActive = false;
+	bool bLeftMouseLookHeld = false;
+	bool bRightMouseLookHeld = false;
+	bool bSuppressLeftClickTargetOnRelease = false;
 	FString CurrentBackpedalAnimationPath;
+	FString CurrentTurnInPlaceAnimationPath;
 
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -472,17 +500,34 @@ protected:
 	/** Restores normal movement-facing behavior after movement input ends */
 	void StopMove(const FInputActionValue& Value);
 
-	/** Called for looking input */
+	/** Called for controller/thumbstick looking input */
 	void Look(const FInputActionValue& Value);
+
+	/** Called for mouse-delta look input while orbit/steer buttons are held */
+	void MouseLook(const FInputActionValue& Value);
 
 	/** Called for raw mouse-wheel camera zoom input */
 	void ZoomCamera(float AxisValue);
+
+	void OnLeftMousePressed();
+	void OnLeftMouseReleased();
+	void OnRightMousePressed();
+	void OnRightMouseReleased();
 
 	/** Fallback target-select input routed through the possessed pawn input component */
 	void TargetUnderCursorInput();
 
 	/** Fallback target-cycle input routed through the possessed pawn input component */
 	void TargetNextInput();
+
+	void UpdateMouseSteering(float DeltaSeconds);
+	void BeginTurnInPlace(float YawDeltaDegrees);
+	void EndTurnInPlace(bool bForce = false);
+	void RestoreDefaultLocomotionAnimation();
+	bool IsGameplayMouseInputAllowed() const;
+	bool IsMouseCameraOrbitActive() const;
+	bool IsMouseFacingControlActive() const;
+	bool IsDualMouseDriveActive() const;
 
 public:
 

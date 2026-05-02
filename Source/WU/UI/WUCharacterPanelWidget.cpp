@@ -273,12 +273,21 @@ FText UWUCharacterPanelWidget::GetDerivedStatsText() const
 	}
 
 	const FWUDerivedStats Stats = Character->GetDerivedStats();
+	const int32 ExperienceToNext = Character->GetExperienceToNextLevel();
+	const FString ExperienceText = ExperienceToNext > 0
+		? FString::Printf(
+			TEXT("Experience: %d / %d (%.0f%%)"),
+			Character->GetCharacterExperience(),
+			ExperienceToNext,
+			Character->GetExperiencePercent() * 100.0f)
+		: FString(TEXT("Experience: Max Level"));
 	return FText::FromString(FString::Printf(
-		TEXT("Health: %.0f / %.0f\nMagic: %.0f / %.0f\nCrit: %.2f%%\nSpell Power: +%.1f%%"),
+		TEXT("Health: %.0f / %.0f\nMagic: %.0f / %.0f\n%s\nCrit: %.2f%%\nSpell Power: +%.1f%%"),
 		Character->GetCurrentHealth(),
 		Character->GetMaxHealth(),
 		Character->GetCurrentMagic(),
 		Character->GetMaxMagic(),
+		*ExperienceText,
 		Stats.CriticalChancePercent,
 		Stats.SpellPowerPercent));
 }

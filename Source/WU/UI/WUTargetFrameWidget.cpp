@@ -162,6 +162,22 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 							SNew(SImage)
 							.Image(&PortraitFrameBrush)
 						]
+
+						+ SOverlay::Slot()
+						.HAlign(HAlign_Right)
+						.VAlign(VAlign_Bottom)
+						.Padding(FMargin(0.0f, 0.0f, 6.0f, 4.0f))
+						[
+							SNew(STextBlock)
+							.Text_Lambda([this]()
+							{
+								return GetLevelText();
+							})
+							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+							.ColorAndOpacity(ValueColor)
+							.ShadowOffset(FVector2D(1.0f, 1.0f))
+							.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))
+						]
 					]
 				]
 
@@ -175,16 +191,24 @@ TSharedRef<SWidget> UWUTargetFrameWidget::RebuildWidget()
 					.AutoHeight()
 					.Padding(FMargin(1.0f, 0.0f, 0.0f, 3.0f))
 					[
-						SNew(STextBlock)
-						.Text_Lambda([this]()
-						{
-							return GetTargetNameText();
-						})
-						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-						.ColorAndOpacity(LabelColor)
-						.ShadowOffset(FVector2D(1.0f, 1.0f))
-						.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
-						.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+						SNew(SHorizontalBox)
+
+						+ SHorizontalBox::Slot()
+						.FillWidth(1.0f)
+						.VAlign(VAlign_Center)
+						[
+							SNew(STextBlock)
+							.Text_Lambda([this]()
+							{
+								return GetTargetNameText();
+							})
+							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+							.ColorAndOpacity(LabelColor)
+							.ShadowOffset(FVector2D(1.0f, 1.0f))
+							.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+							.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+						]
+
 					]
 
 					+ SVerticalBox::Slot()
@@ -312,6 +336,16 @@ FText UWUTargetFrameWidget::GetTargetNameText() const
 	if (const AWUCharacter* Target = GetTargetCharacter())
 	{
 		return Target->GetDisplayName();
+	}
+
+	return FText::GetEmpty();
+}
+
+FText UWUTargetFrameWidget::GetLevelText() const
+{
+	if (const AWUCharacter* Target = GetTargetCharacter())
+	{
+		return FText::AsNumber(Target->GetCharacterLevel());
 	}
 
 	return FText::GetEmpty();

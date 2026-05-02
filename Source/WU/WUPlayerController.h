@@ -17,6 +17,7 @@ class AWUCharacter;
 class UWUCharacterCreatorWidget;
 class UWUCharacterPanelWidget;
 class UWUChatWidget;
+class UWUExperienceBarWidget;
 class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
 class UWUTargetFrameWidget;
@@ -85,6 +86,22 @@ protected:
 	/** Hides the legacy Blueprint player frame when the native unit frame is active. */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
 	bool bHideLegacyPlayerFrameWidget = true;
+
+	/** Native player experience bar widget shown above the action bar. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	TSubclassOf<UWUExperienceBarWidget> ExperienceBarWidgetClass;
+
+	/** Pointer to the native player experience bar widget. */
+	UPROPERTY()
+	TObjectPtr<UWUExperienceBarWidget> ExperienceBarWidget;
+
+	/** Viewport position for the player experience bar. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D ExperienceBarViewportPosition = FVector2D(0.0f, -52.0f);
+
+	/** Viewport size for the player experience bar. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D ExperienceBarViewportSize = FVector2D(560.0f, 26.0f);
 
 	/** Native player chat widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Chat")
@@ -261,6 +278,10 @@ public:
 	/** Applies a cursor-friendly UI input mode, used by death/release UI. */
 	UFUNCTION(BlueprintCallable, Category = "Input|Cursor")
 	void ApplyUIInputMode();
+
+	/** True while a UI overlay should block gameplay mouse-look handling. */
+	UFUNCTION(BlueprintPure, Category = "Input|Cursor")
+	bool HasInteractiveOverlayOpen() const;
 
 	/** Opens the chat input line and gives it keyboard focus. */
 	UFUNCTION(BlueprintCallable, Category = "Chat")

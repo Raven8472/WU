@@ -51,8 +51,9 @@ AWUCharacter::AWUCharacter()
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
+	DefaultRotationRateDegreesPerSecond = GetCharacterMovement()->RotationRate.Yaw;
 
 	GetCharacterMovement()->JumpZVelocity = 500.f;
 	GetCharacterMovement()->AirControl = 0.35f;
@@ -155,6 +156,8 @@ void AWUCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	DefaultRotationRateDegreesPerSecond = GetCharacterMovement()->RotationRate.Yaw;
+
 	if (HasAuthority())
 	{
 		ApplyCharacterProgressionInternal(BloodStatus, CharacterLevel, CharacterExperience, true);
@@ -177,6 +180,8 @@ void AWUCharacter::BeginPlay()
 void AWUCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	UpdateMouseSteering(DeltaSeconds);
 
 	if (HasAuthority())
 	{
@@ -216,14 +221,17 @@ void AWUCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AWUCharacter::StopMove);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Canceled, this, &AWUCharacter::StopMove);
 
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AWUCharacter::MouseLook);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AWUCharacter::Look);
 		//attack
 		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AWUCharacter::StartAttack);
 		//release
 		EnhancedInputComponent->BindAction(ReleaseAction, ETriggerEvent::Started, this, &AWUCharacter::RequestRelease);
 
-		PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUCharacter::TargetUnderCursorInput);
+		PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUCharacter::OnLeftMousePressed);
+		PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &AWUCharacter::OnLeftMouseReleased);
+		PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &AWUCharacter::OnRightMousePressed);
+		PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &AWUCharacter::OnRightMouseReleased);
 		PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AWUCharacter::TargetNextInput);
 		PlayerInputComponent->BindAxisKey(EKeys::MouseWheelAxis, this, &AWUCharacter::ZoomCamera);
 	}
@@ -241,12 +249,32 @@ void AWUCharacter::Move(const FInputActionValue& Value)
 
 void AWUCharacter::StopMove(const FInputActionValue& Value)
 {
+	bKeyboardTurnInPlaceActive = false;
 	EndBackpedal();
+	EndTurnInPlace(true);
 }
 
 void AWUCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D LookAxisVector = Value.Get<FVector2D>();
+	DoLook(LookAxisVector.X, LookAxisVector.Y);
+}
+
+void AWUCharacter::MouseLook(const FInputActionValue& Value)
+{
+	if (!IsMouseCameraOrbitActive())
+	{
+		return;
+	}
+
+	const FVector2D LookAxisVector = Value.Get<FVector2D>();
+	PendingLeftClickDragDistance += LookAxisVector.Size();
+
+	if (PendingLeftClickDragDistance >= ClickTargetDragThreshold)
+	{
+		bSuppressLeftClickTargetOnRelease = true;
+	}
+
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
 }
 
@@ -265,6 +293,58 @@ void AWUCharacter::ZoomCamera(float AxisValue)
 		MaxLength);
 }
 
+void AWUCharacter::OnLeftMousePressed()
+{
+	if (!IsGameplayMouseInputAllowed())
+	{
+		return;
+	}
+
+	bLeftMouseLookHeld = true;
+	bSuppressLeftClickTargetOnRelease = false;
+	PendingLeftClickDragDistance = 0.0f;
+}
+
+void AWUCharacter::OnLeftMouseReleased()
+{
+	const bool bShouldTargetUnderCursor =
+		bLeftMouseLookHeld
+		&& !bSuppressLeftClickTargetOnRelease
+		&& !bRightMouseLookHeld
+		&& IsGameplayMouseInputAllowed();
+
+	bLeftMouseLookHeld = false;
+	PendingLeftClickDragDistance = 0.0f;
+	bSuppressLeftClickTargetOnRelease = false;
+
+	if (bShouldTargetUnderCursor)
+	{
+		TargetUnderCursorInput();
+	}
+}
+
+void AWUCharacter::OnRightMousePressed()
+{
+	if (!IsGameplayMouseInputAllowed())
+	{
+		return;
+	}
+
+	bKeyboardTurnInPlaceActive = false;
+	bRightMouseLookHeld = true;
+
+	if (bLeftMouseLookHeld)
+	{
+		bSuppressLeftClickTargetOnRelease = true;
+	}
+}
+
+void AWUCharacter::OnRightMouseReleased()
+{
+	bRightMouseLookHeld = false;
+	EndTurnInPlace(true);
+}
+
 void AWUCharacter::TargetUnderCursorInput()
 {
 	if (AWUPlayerController* WUPC = Cast<AWUPlayerController>(GetController()))
@@ -281,14 +361,104 @@ void AWUCharacter::TargetNextInput()
 	}
 }
 
+bool AWUCharacter::IsGameplayMouseInputAllowed() const
+{
+	if (const AWUPlayerController* WUPC = Cast<AWUPlayerController>(GetController()))
+	{
+		return !WUPC->HasInteractiveOverlayOpen();
+	}
+
+	return true;
+}
+
+bool AWUCharacter::IsMouseCameraOrbitActive() const
+{
+	return IsGameplayMouseInputAllowed() && (bLeftMouseLookHeld || bRightMouseLookHeld);
+}
+
+bool AWUCharacter::IsMouseFacingControlActive() const
+{
+	return IsGameplayMouseInputAllowed() && bRightMouseLookHeld;
+}
+
+bool AWUCharacter::IsDualMouseDriveActive() const
+{
+	return IsGameplayMouseInputAllowed() && bLeftMouseLookHeld && bRightMouseLookHeld;
+}
+
+void AWUCharacter::UpdateMouseSteering(float DeltaSeconds)
+{
+	if (!IsLocallyControlled() || !GetCharacterMovement())
+	{
+		return;
+	}
+
+	const bool bMouseFacingActive =
+		IsMouseFacingControlActive()
+		&& GetController() != nullptr
+		&& !bIsDead;
+
+	GetCharacterMovement()->bUseControllerDesiredRotation = bMouseFacingActive;
+	GetCharacterMovement()->RotationRate = FRotator(
+		0.0f,
+		bMouseFacingActive ? MouseFacingTurnRateDegreesPerSecond : DefaultRotationRateDegreesPerSecond,
+		0.0f);
+
+	if (!bMouseFacingActive)
+	{
+		if (!bKeyboardTurnInPlaceActive)
+		{
+			EndTurnInPlace(true);
+		}
+		return;
+	}
+
+	bKeyboardTurnInPlaceActive = false;
+
+	if (IsDualMouseDriveActive())
+	{
+		EndTurnInPlace(true);
+		AddMovementInput(GetActorForwardVector(), 1.0f);
+		return;
+	}
+
+	if (GetVelocity().SizeSquared2D() > KINDA_SMALL_NUMBER)
+	{
+		EndTurnInPlace(true);
+		return;
+	}
+
+	const float YawDeltaDegrees = FMath::FindDeltaAngleDegrees(
+		GetActorRotation().Yaw,
+		GetControlRotation().Yaw);
+
+	if (FMath::Abs(YawDeltaDegrees) >= TurnInPlaceActivationAngleDegrees)
+	{
+		BeginTurnInPlace(YawDeltaDegrees);
+		return;
+	}
+
+	EndTurnInPlace();
+}
+
 void AWUCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr)
 	{
+		const bool bHasForwardInput = !FMath::IsNearlyZero(Forward);
+		const bool bHasRightInput = !FMath::IsNearlyZero(Right);
+
+		if (bHasForwardInput)
+		{
+			bKeyboardTurnInPlaceActive = false;
+			EndTurnInPlace(true);
+		}
+
 		const bool bWantsBackpedal = Forward < -KINDA_SMALL_NUMBER;
 
 		if (bWantsBackpedal)
 		{
+			bKeyboardTurnInPlaceActive = false;
 			BeginBackpedal(Right);
 			AddMovementInput(GetActorForwardVector(), Forward);
 			AddMovementInput(GetActorRightVector(), Right);
@@ -297,14 +467,23 @@ void AWUCharacter::DoMove(float Right, float Forward)
 
 		EndBackpedal();
 
-		const FRotator Rotation = GetController()->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
+		if (bHasForwardInput)
+		{
+			AddMovementInput(GetActorForwardVector(), Forward);
+		}
 
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		if (bHasRightInput && !IsMouseFacingControlActive())
+		{
+			if (!bHasForwardInput)
+			{
+				bKeyboardTurnInPlaceActive = true;
+				BeginTurnInPlace(Right);
+			}
 
-		AddMovementInput(ForwardDirection, Forward);
-		AddMovementInput(RightDirection, Right);
+			const float DeltaSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0f;
+			const float YawDelta = Right * KeyboardTurnRateDegreesPerSecond * DeltaSeconds;
+			AddActorLocalRotation(FRotator(0.0f, YawDelta, 0.0f));
+		}
 	}
 }
 
@@ -868,6 +1047,9 @@ void AWUCharacter::SeedStarterInventory()
 
 void AWUCharacter::BeginBackpedal(float Right)
 {
+	bKeyboardTurnInPlaceActive = false;
+	EndTurnInPlace(true);
+
 	if (!bBackpedaling)
 	{
 		PreBackpedalMaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
@@ -886,6 +1068,7 @@ void AWUCharacter::BeginBackpedal(float Right)
 	if (UAnimationAsset* BackpedalAnimation = LoadAnimationAssetForPath(BackpedalAnimationPath))
 	{
 		GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		GetMesh()->SetPlayRate(1.0f);
 		GetMesh()->PlayAnimation(BackpedalAnimation, true);
 		bBackpedalAnimationActive = true;
 		CurrentBackpedalAnimationPath = BackpedalAnimationPath;
@@ -900,7 +1083,7 @@ void AWUCharacter::EndBackpedal()
 	}
 
 	bBackpedaling = false;
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 
 	if (!bBackpedalAnimationActive)
 	{
@@ -909,9 +1092,75 @@ void AWUCharacter::EndBackpedal()
 
 	bBackpedalAnimationActive = false;
 	CurrentBackpedalAnimationPath.Reset();
+	RestoreDefaultLocomotionAnimation();
+}
 
+void AWUCharacter::BeginTurnInPlace(float YawDeltaDegrees)
+{
+	if (bBackpedaling)
+	{
+		return;
+	}
+
+	const TCHAR* TurnAnimationPath = GetTurnInPlaceAnimationPath(CharacterAppearance.Sex, YawDeltaDegrees);
+	if (!TurnAnimationPath)
+	{
+		return;
+	}
+
+	if (bTurnInPlaceAnimationActive && CurrentTurnInPlaceAnimationPath == TurnAnimationPath)
+	{
+		return;
+	}
+
+	if (UAnimationAsset* TurnAnimation = LoadAnimationAssetForPath(TurnAnimationPath))
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		GetMesh()->PlayAnimation(TurnAnimation, true);
+		GetMesh()->SetPlayRate(TurnInPlaceAnimationPlayRate);
+		bTurnInPlaceAnimationActive = true;
+		CurrentTurnInPlaceAnimationPath = TurnAnimationPath;
+
+		if (const UWorld* World = GetWorld())
+		{
+			TurnInPlaceAnimationHoldUntilSeconds = World->GetTimeSeconds() + TurnInPlaceAnimationMinSeconds;
+		}
+	}
+}
+
+void AWUCharacter::EndTurnInPlace(bool bForce)
+{
+	if (!bTurnInPlaceAnimationActive)
+	{
+		return;
+	}
+
+	if (!bForce)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			if (World->GetTimeSeconds() < TurnInPlaceAnimationHoldUntilSeconds)
+			{
+				return;
+			}
+		}
+	}
+
+	bTurnInPlaceAnimationActive = false;
+	CurrentTurnInPlaceAnimationPath.Reset();
+	TurnInPlaceAnimationHoldUntilSeconds = 0.0f;
+
+	if (!bBackpedalAnimationActive)
+	{
+		RestoreDefaultLocomotionAnimation();
+	}
+}
+
+void AWUCharacter::RestoreDefaultLocomotionAnimation()
+{
 	if (UClass* AnimClass = LoadAnimClassForPath(GetAnimationBlueprintPath(CharacterAppearance.Sex)))
 	{
+		GetMesh()->SetPlayRate(1.0f);
 		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 		GetMesh()->SetAnimInstanceClass(AnimClass);
 	}
@@ -1407,6 +1656,22 @@ const TCHAR* AWUCharacter::GetBackpedalAnimationPath(EWUCharacterSex Sex, float 
 	}
 
 	return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_Backwards.A_Hu_M_Walk_Backwards");
+}
+
+const TCHAR* AWUCharacter::GetTurnInPlaceAnimationPath(EWUCharacterSex Sex, float YawDeltaDegrees) const
+{
+	const bool bTurnRight = YawDeltaDegrees > 0.0f;
+
+	if (Sex == EWUCharacterSex::Female)
+	{
+		return bTurnRight
+			? TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Idle_StepRight.A_Hu_F_Idle_StepRight")
+			: TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Idle_StepLeft.A_Hu_F_Idle_StepLeft");
+	}
+
+	return bTurnRight
+		? TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Idle_StepRight.A_Hu_M_Idle_StepRight")
+		: TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Idle_StepLeft.A_Hu_M_Idle_StepLeft");
 }
 
 const TCHAR* AWUCharacter::GetPantsMeshPath(EWUCharacterSex Sex) const
