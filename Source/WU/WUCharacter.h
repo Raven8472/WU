@@ -109,6 +109,27 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkeletalMeshComponent> BeardMeshComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> PantsMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> HandsMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> BracersMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> ChestOutfitMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> ChestAddOutfitMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> BeltOutfitMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Appearance", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> BootsOutfitMeshComponent;
+
 public:
 
 	/** Constructor */
@@ -362,8 +383,16 @@ public:
 	const TCHAR* GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const;
 	const TCHAR* GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const;
 	const TCHAR* GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const;
+	const TCHAR* GetEyeMaterialPath() const;
 	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
 	const TCHAR* GetAnimationBlueprintPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetPantsMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetHandsMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetBracersMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetStarterChestOutfitMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetStarterChestAddOutfitMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetStarterBeltOutfitMeshPath(EWUCharacterSex Sex) const;
+	const TCHAR* GetStarterBootsOutfitMeshPath(EWUCharacterSex Sex) const;
 	int32 NormalizeAppearanceIndex(int32 Index, int32 Count) const;
 	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, bool bResetResources);
 
