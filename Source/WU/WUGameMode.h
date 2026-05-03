@@ -27,7 +27,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Spawning", meta = (ClampMin = 0.0f, Units = "cm"))
 	float FallbackSpawnSpacing = 180.0f;
 
-	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
 
 private:
 	int32 SpawnedPlayerCount = 0;

@@ -21,11 +21,20 @@ AWUGameMode::AWUGameMode()
 	}
 }
 
-void AWUGameMode::PostLogin(APlayerController* NewPlayer)
+void AWUGameMode::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)
 {
-	Super::PostLogin(NewPlayer);
-
 	if (!NewPlayer)
+	{
+		return;
+	}
+
+	if (NewPlayer->GetPawn() || bStartPlayersAsSpectators || MustSpectate(NewPlayer) || !PlayerCanRestart(NewPlayer))
+	{
+		return;
+	}
+
+	const TSubclassOf<APawn> EffectivePlayerPawnClass = PlayerPawnClass ? PlayerPawnClass : DefaultPawnClass;
+	if (!EffectivePlayerPawnClass)
 	{
 		return;
 	}
@@ -34,15 +43,6 @@ void AWUGameMode::PostLogin(APlayerController* NewPlayer)
 	UGameplayStatics::GetAllActorsOfClass(this, APlayerStart::StaticClass(), PlayerStarts);
 
 	if (PlayerStarts.IsEmpty())
-	{
-		return;
-	}
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = NewPlayer;
-	SpawnParams.Instigator = nullptr;
-
-	if (!PlayerPawnClass)
 	{
 		return;
 	}
@@ -60,8 +60,12 @@ void AWUGameMode::PostLogin(APlayerController* NewPlayer)
 		? StartSpot->GetActorRightVector() * (static_cast<float>(SpawnIndex) * FallbackSpawnSpacing)
 		: FVector::ZeroVector;
 
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = NewPlayer;
+	SpawnParams.Instigator = nullptr;
+
 	APawn* NewCharacter = GetWorld()->SpawnActor<APawn>(
-		PlayerPawnClass,
+		EffectivePlayerPawnClass,
 		StartLocation + FallbackOffset,
 		StartSpot->GetActorRotation(),
 		SpawnParams

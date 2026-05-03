@@ -18,7 +18,7 @@ public:
 
 protected:
 	UPROPERTY(EditAnywhere, Category = "WU|Login")
-	FString GameMapPath = TEXT("/Game/ThirdPerson/Lvl_WU_Prototype");
+	FString GameMapPath = TEXT("/Game/ThirdPerson/Lvl_MagicalBritain_Persistent?game=/Game/Blueprints/Core/BP_WUBaseGameMode.BP_WUBaseGameMode_C");
 
 private:
 	bool AreAllConnectedPlayersReady() const;

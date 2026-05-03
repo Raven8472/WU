@@ -130,7 +130,11 @@ void AWULoginPlayerController::EnterGame()
 	if (GetNetMode() == NM_Standalone)
 	{
 		RemoveMenuWidgets();
-		UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/ThirdPerson/Lvl_WU_Prototype")));
+		UGameplayStatics::OpenLevel(
+			this,
+			FName(TEXT("/Game/ThirdPerson/Lvl_MagicalBritain_Persistent")),
+			true,
+			TEXT("game=/Game/Blueprints/Core/BP_WUBaseGameMode.BP_WUBaseGameMode_C"));
 		return;
 	}
 
