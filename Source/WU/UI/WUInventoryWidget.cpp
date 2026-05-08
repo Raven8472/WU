@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/WUInventoryWidget.h"
+#include "Engine/GameInstance.h"
 #include "InputCoreTypes.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
@@ -43,6 +44,26 @@ UWUInventoryWidget::UWUInventoryWidget(const FObjectInitializer& ObjectInitializ
 	{
 		DisabledSlotTexture = DisabledSlotAsset.Object;
 	}
+}
+
+void UWUInventoryWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	if (UWUClientSessionSubsystem* Session = GetSessionSubsystem())
+	{
+		Session->OnCurrencySnapshotLoaded.AddDynamic(this, &UWUInventoryWidget::HandleCurrencySnapshotLoaded);
+	}
+}
+
+void UWUInventoryWidget::NativeDestruct()
+{
+	if (UWUClientSessionSubsystem* Session = GetSessionSubsystem())
+	{
+		Session->OnCurrencySnapshotLoaded.RemoveDynamic(this, &UWUInventoryWidget::HandleCurrencySnapshotLoaded);
+	}
+
+	Super::NativeDestruct();
 }
 
 TSharedRef<SWidget> UWUInventoryWidget::RebuildWidget()
@@ -129,6 +150,13 @@ TSharedRef<SWidget> UWUInventoryWidget::RebuildWidget()
 
 				+ SVerticalBox::Slot()
 				.AutoHeight()
+				.Padding(FMargin(0.0f, 0.0f, 0.0f, 12.0f))
+				[
+					CreateCurrencySection()
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
 				[
 					SNew(SHorizontalBox)
 
@@ -164,6 +192,7 @@ void UWUInventoryWidget::ToggleInventory()
 void UWUInventoryWidget::ShowInventory()
 {
 	bInventoryOpen = true;
+	RequestCurrencySnapshot();
 	InvalidateLayoutAndVolatility();
 }
 
@@ -191,6 +220,77 @@ EVisibility UWUInventoryWidget::GetInventoryVisibility() const
 bool UWUInventoryWidget::IsBagSlotUnlocked(int32 BagSlotIndex) const
 {
 	return BagSlotIndex >= 0 && BagSlotIndex < StartingBagCount;
+}
+
+TSharedRef<SWidget> UWUInventoryWidget::CreateCurrencySection() const
+{
+	return SNew(SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(FLinearColor(0.04f, 0.035f, 0.028f, 0.78f))
+		.Padding(FMargin(8.0f, 5.0f))
+		.ToolTipText_Lambda([this]()
+		{
+			return GetCurrencyTooltipText();
+		})
+		[
+			SNew(SHorizontalBox)
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("CarriedCurrencyLabel", "Carried"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+				.ColorAndOpacity(LabelColor)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+			]
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(FMargin(8.0f, 0.0f, 18.0f, 0.0f))
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text_Lambda([this]()
+				{
+					return GetCarriedCurrencyText();
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+				.ColorAndOpacity(ValueColor)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+			]
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("BankCurrencyLabel", "Bank"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+				.ColorAndOpacity(LabelColor)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+			]
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text_Lambda([this]()
+				{
+					return GetBankCurrencyText();
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+				.ColorAndOpacity(ValueColor)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+			]
+		];
 }
 
 TSharedRef<SWidget> UWUInventoryWidget::CreateBagSlot(int32 BagSlotIndex) const
@@ -224,6 +324,43 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateBagSlot(int32 BagSlotIndex) const
 				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f))
 			]
 		];
+}
+
+FText UWUInventoryWidget::GetCarriedCurrencyText() const
+{
+	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
+	if (!Session || !Session->HasCurrencySnapshot())
+	{
+		return LOCTEXT("CurrencyLoading", "...");
+	}
+
+	return Session->GetCurrencySnapshot().CharacterWallet.Balance.ToDisplayText();
+}
+
+FText UWUInventoryWidget::GetBankCurrencyText() const
+{
+	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
+	if (!Session || !Session->HasCurrencySnapshot())
+	{
+		return LOCTEXT("CurrencyLoading", "...");
+	}
+
+	return Session->GetCurrencySnapshot().AccountBankWallet.Balance.ToDisplayText();
+}
+
+FText UWUInventoryWidget::GetCurrencyTooltipText() const
+{
+	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
+	if (!Session || !Session->HasCurrencySnapshot())
+	{
+		return LOCTEXT("CurrencyLoadingTooltip", "Loading currency...");
+	}
+
+	const FWUBackendCurrencySnapshot& Snapshot = Session->GetCurrencySnapshot();
+	return FText::Format(
+		LOCTEXT("CurrencyTooltip", "Carried: {0} Knuts\nBank: {1} Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon"),
+		FText::AsNumber(Snapshot.CharacterWallet.Balance.BalanceKnuts),
+		FText::AsNumber(Snapshot.AccountBankWallet.Balance.BalanceKnuts));
 }
 
 TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex)
@@ -388,6 +525,30 @@ FReply UWUInventoryWidget::HandleInventorySlotClicked(int32 AbsoluteSlotIndex)
 	}
 
 	return FReply::Unhandled();
+}
+
+void UWUInventoryWidget::RequestCurrencySnapshot() const
+{
+	if (UWUClientSessionSubsystem* Session = GetSessionSubsystem())
+	{
+		Session->RefreshSelectedCurrencySnapshot();
+	}
+}
+
+UWUClientSessionSubsystem* UWUInventoryWidget::GetSessionSubsystem() const
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		return GameInstance->GetSubsystem<UWUClientSessionSubsystem>();
+	}
+
+	return nullptr;
+}
+
+void UWUInventoryWidget::HandleCurrencySnapshotLoaded(const FWUBackendCurrencySnapshot& Snapshot)
+{
+	(void)Snapshot;
+	InvalidateLayoutAndVolatility();
 }
 
 void UWUInventoryWidget::ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin)

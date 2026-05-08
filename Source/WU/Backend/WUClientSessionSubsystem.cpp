@@ -19,6 +19,15 @@ bool FWUBackendCharacterLocation::IsNearlyZero() const
 	return ToVector().IsNearlyZero();
 }
 
+FText FWUBackendCurrencyBreakdown::ToDisplayText() const
+{
+	return FText::Format(
+		NSLOCTEXT("WUClientSessionSubsystem", "CurrencyBreakdownDisplay", "{0} G  {1} S  {2} K"),
+		FText::AsNumber(Galleons),
+		FText::AsNumber(Sickles),
+		FText::AsNumber(Knuts));
+}
+
 void UWUClientSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -125,6 +134,12 @@ void UWUClientSessionSubsystem::DeleteCharacter(const FString& CharacterId)
 
 void UWUClientSessionSubsystem::SelectCharacter(const FString& CharacterId)
 {
+	if (SelectedCharacterId != CharacterId)
+	{
+		CurrencySnapshot = FWUBackendCurrencySnapshot();
+		bHasCurrencySnapshot = false;
+	}
+
 	SelectedCharacterId = CharacterId;
 }
 
@@ -267,6 +282,25 @@ void UWUClientSessionSubsystem::LoadSelectedClubRoster(bool bIncludeOffline)
 	Request->ProcessRequest();
 }
 
+void UWUClientSessionSubsystem::RefreshSelectedCurrencySnapshot()
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before loading currency."));
+		return;
+	}
+
+	const FString Path = FString::Printf(
+		TEXT("/api/currency/accounts/%s/realms/%s/characters/%s"),
+		*Account.AccountId,
+		*SelectedRealmId,
+		*SelectedCharacterId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("GET"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleRefreshCurrencySnapshotResponse);
+	Request->ProcessRequest();
+}
+
 void UWUClientSessionSubsystem::ClearSession()
 {
 	AccessToken.Reset();
@@ -275,6 +309,8 @@ void UWUClientSessionSubsystem::ClearSession()
 	SelectedRealmId.Reset();
 	Characters.Reset();
 	SelectedCharacterId.Reset();
+	CurrencySnapshot = FWUBackendCurrencySnapshot();
+	bHasCurrencySnapshot = false;
 	OnSessionCleared.Broadcast();
 }
 
@@ -322,6 +358,16 @@ const TArray<FWUBackendCharacterSummary>& UWUClientSessionSubsystem::GetCharacte
 const FString& UWUClientSessionSubsystem::GetSelectedCharacterId() const
 {
 	return SelectedCharacterId;
+}
+
+const FWUBackendCurrencySnapshot& UWUClientSessionSubsystem::GetCurrencySnapshot() const
+{
+	return CurrencySnapshot;
+}
+
+bool UWUClientSessionSubsystem::HasCurrencySnapshot() const
+{
+	return bHasCurrencySnapshot;
 }
 
 void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
@@ -378,6 +424,8 @@ void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, 
 	SelectedRealmId = Realms[0].RealmId;
 	Characters.Reset();
 	SelectedCharacterId.Reset();
+	CurrencySnapshot = FWUBackendCurrencySnapshot();
+	bHasCurrencySnapshot = false;
 
 	OnLoginSucceeded.Broadcast();
 	ListCharacters();
@@ -676,6 +724,34 @@ void UWUClientSessionSubsystem::HandleLoadClubRosterResponse(FHttpRequestPtr Req
 	}
 
 	OnClubRosterLoaded.Broadcast(Members);
+}
+
+void UWUClientSessionSubsystem::HandleRefreshCurrencySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendCurrencySnapshot NewSnapshot;
+	if (!TryParseCurrencySnapshot(RootObject, NewSnapshot))
+	{
+		OnRequestFailed.Broadcast(TEXT("Currency snapshot response did not include valid wallets."));
+		return;
+	}
+
+	CurrencySnapshot = NewSnapshot;
+	bHasCurrencySnapshot = true;
+	OnCurrencySnapshotLoaded.Broadcast(CurrencySnapshot);
 }
 
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateRequest(const FString& Verb, const FString& Path) const
@@ -1035,6 +1111,62 @@ bool UWUClientSessionSubsystem::TryParseClubMember(const TSharedPtr<FJsonObject>
 	}
 
 	return !OutMember.CharacterId.IsEmpty() && !OutMember.DisplayName.IsEmpty();
+}
+
+bool UWUClientSessionSubsystem::TryParseCurrencySnapshot(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencySnapshot& OutSnapshot)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* CharacterWalletObject = nullptr;
+	const TSharedPtr<FJsonObject>* AccountBankWalletObject = nullptr;
+	return JsonObject->TryGetObjectField(TEXT("characterWallet"), CharacterWalletObject)
+		&& JsonObject->TryGetObjectField(TEXT("accountBankWallet"), AccountBankWalletObject)
+		&& TryParseCurrencyWallet(*CharacterWalletObject, OutSnapshot.CharacterWallet)
+		&& TryParseCurrencyWallet(*AccountBankWalletObject, OutSnapshot.AccountBankWallet);
+}
+
+bool UWUClientSessionSubsystem::TryParseCurrencyWallet(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyWallet& OutWallet)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* BalanceObject = nullptr;
+	return JsonObject->TryGetStringField(TEXT("walletId"), OutWallet.WalletId)
+		&& JsonObject->TryGetStringField(TEXT("walletType"), OutWallet.WalletType)
+		&& JsonObject->TryGetStringField(TEXT("ownerId"), OutWallet.OwnerId)
+		&& JsonObject->TryGetObjectField(TEXT("balance"), BalanceObject)
+		&& TryParseCurrencyBreakdown(*BalanceObject, OutWallet.Balance);
+}
+
+bool UWUClientSessionSubsystem::TryParseCurrencyBreakdown(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyBreakdown& OutBalance)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	double BalanceKnuts = 0.0;
+	double Galleons = 0.0;
+	double Sickles = 0.0;
+	double Knuts = 0.0;
+	if (!JsonObject->TryGetNumberField(TEXT("balanceKnuts"), BalanceKnuts)
+		|| !JsonObject->TryGetNumberField(TEXT("galleons"), Galleons)
+		|| !JsonObject->TryGetNumberField(TEXT("sickles"), Sickles)
+		|| !JsonObject->TryGetNumberField(TEXT("knuts"), Knuts))
+	{
+		return false;
+	}
+
+	OutBalance.BalanceKnuts = FMath::Max<int64>(0, FMath::RoundToInt64(BalanceKnuts));
+	OutBalance.Galleons = FMath::Max<int64>(0, FMath::RoundToInt64(Galleons));
+	OutBalance.Sickles = FMath::Max<int64>(0, FMath::RoundToInt64(Sickles));
+	OutBalance.Knuts = FMath::Max<int64>(0, FMath::RoundToInt64(Knuts));
+	return true;
 }
 
 bool UWUClientSessionSubsystem::TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation)

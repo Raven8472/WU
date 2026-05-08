@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Backend/WUClientSessionSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Inventory/WUInventoryTypes.h"
 #include "Styling/SlateBrush.h"
@@ -39,6 +40,8 @@ public:
 	int32 GetUnlockedInventorySlotCount() const;
 
 protected:
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	int32 TotalBagSlots = 5;
@@ -50,7 +53,7 @@ protected:
 	int32 SlotsPerBag = 20;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
-	FVector2D InventorySize = FVector2D(520.0f, 340.0f);
+	FVector2D InventorySize = FVector2D(520.0f, 372.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
 	FVector2D InventorySlotSize = FVector2D(34.0f, 34.0f);
@@ -83,8 +86,12 @@ private:
 	EVisibility GetInventoryVisibility() const;
 	bool IsBagSlotUnlocked(int32 BagSlotIndex) const;
 	TSharedRef<SWidget> CreateBagSlot(int32 BagSlotIndex) const;
+	TSharedRef<SWidget> CreateCurrencySection() const;
 	TSharedRef<SWidget> CreateBagSection(int32 BagIndex);
 	TSharedRef<SWidget> CreateInventorySlot(int32 AbsoluteSlotIndex);
+	FText GetCarriedCurrencyText() const;
+	FText GetBankCurrencyText() const;
+	FText GetCurrencyTooltipText() const;
 	FText GetInventorySlotText(int32 AbsoluteSlotIndex) const;
 	FText GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) const;
 	FSlateColor GetInventorySlotTextColor(int32 AbsoluteSlotIndex) const;
@@ -92,6 +99,11 @@ private:
 	FReply HandleInventorySlotClicked(int32 AbsoluteSlotIndex);
 
 	void ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin = FMargin(0.0f));
+	void RequestCurrencySnapshot() const;
+	UWUClientSessionSubsystem* GetSessionSubsystem() const;
+
+	UFUNCTION()
+	void HandleCurrencySnapshotLoaded(const FWUBackendCurrencySnapshot& Snapshot);
 
 private:
 

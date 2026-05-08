@@ -158,7 +158,7 @@ protected:
 
 	/** Viewport size for the inventory shell widget */
 	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
-	FVector2D InventoryViewportSize = FVector2D(520.0f, 340.0f);
+	FVector2D InventoryViewportSize = FVector2D(520.0f, 372.0f);
 
 	/** Native character panel widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Character")

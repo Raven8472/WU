@@ -135,6 +135,56 @@ struct FWUBackendClubInviteSummary
 	FDateTime ExpiresAtUtc;
 };
 
+USTRUCT(BlueprintType)
+struct FWUBackendCurrencyBreakdown
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	int64 BalanceKnuts = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	int64 Galleons = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	int64 Sickles = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	int64 Knuts = 0;
+
+	FText ToDisplayText() const;
+};
+
+USTRUCT(BlueprintType)
+struct FWUBackendCurrencyWallet
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	FString WalletId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	FString WalletType;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	FString OwnerId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	FWUBackendCurrencyBreakdown Balance;
+};
+
+USTRUCT(BlueprintType)
+struct FWUBackendCurrencySnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	FWUBackendCurrencyWallet CharacterWallet;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Currency")
+	FWUBackendCurrencyWallet AccountBankWallet;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUClientSessionSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionErrorSignature, const FString&, ErrorMessage);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharactersSignature, const TArray<FWUBackendCharacterSummary>&, Characters);
@@ -143,6 +193,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterDeletedSign
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubSignature, const FWUClubSummary&, Club);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubInviteSignature, const FWUBackendClubInviteSummary&, Invite);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubMembersSignature, const TArray<FWUClubMemberSummary>&, Members);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCurrencySnapshotSignature, const FWUBackendCurrencySnapshot&, Snapshot);
 
 /**
  * Client-side bridge to the WU persistence backend.
@@ -184,6 +235,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
 	FWUClientSessionClubMembersSignature OnClubRosterLoaded;
 
+	UPROPERTY(BlueprintAssignable, Category = "WU|Currency")
+	FWUClientSessionCurrencySnapshotSignature OnCurrencySnapshotLoaded;
+
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionErrorSignature OnRequestFailed;
 
@@ -220,6 +274,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WU|Club")
 	void LoadSelectedClubRoster(bool bIncludeOffline);
 
+	UFUNCTION(BlueprintCallable, Category = "WU|Currency")
+	void RefreshSelectedCurrencySnapshot();
+
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
 
@@ -250,6 +307,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "WU|Session")
 	const FString& GetSelectedCharacterId() const;
 
+	UFUNCTION(BlueprintPure, Category = "WU|Currency")
+	const FWUBackendCurrencySnapshot& GetCurrencySnapshot() const;
+
+	UFUNCTION(BlueprintPure, Category = "WU|Currency")
+	bool HasCurrencySnapshot() const;
+
 protected:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "WU|Session")
 	FString BackendBaseUrl = TEXT("http://127.0.0.1:5080");
@@ -265,6 +328,7 @@ private:
 	void HandleCreateClubResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleRefreshCurrencySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
@@ -283,6 +347,9 @@ private:
 	static bool TryParseClubSummary(const TSharedPtr<FJsonObject>& JsonObject, FWUClubSummary& OutClub);
 	static bool TryParseClubInvite(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendClubInviteSummary& OutInvite);
 	static bool TryParseClubMember(const TSharedPtr<FJsonObject>& JsonObject, FWUClubMemberSummary& OutMember);
+	static bool TryParseCurrencySnapshot(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencySnapshot& OutSnapshot);
+	static bool TryParseCurrencyWallet(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyWallet& OutWallet);
+	static bool TryParseCurrencyBreakdown(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyBreakdown& OutBalance);
 	static bool TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation);
 	static bool TryParseRace(const FString& Value, EWUCharacterRace& OutRace);
 	static bool TryParseSex(const FString& Value, EWUCharacterSex& OutSex);
@@ -301,4 +368,6 @@ private:
 	FString SelectedRealmId;
 	TArray<FWUBackendCharacterSummary> Characters;
 	FString SelectedCharacterId;
+	FWUBackendCurrencySnapshot CurrencySnapshot;
+	bool bHasCurrencySnapshot = false;
 };
