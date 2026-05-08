@@ -331,7 +331,7 @@ FText UWUInventoryWidget::GetCarriedCurrencyText() const
 	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
 	if (!Session || !Session->HasCurrencySnapshot())
 	{
-		return LOCTEXT("CurrencyLoading", "...");
+		return LOCTEXT("CurrencyZero", "0 G  0 S  0 K");
 	}
 
 	return Session->GetCurrencySnapshot().CharacterWallet.Balance.ToDisplayText();
@@ -342,7 +342,7 @@ FText UWUInventoryWidget::GetBankCurrencyText() const
 	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
 	if (!Session || !Session->HasCurrencySnapshot())
 	{
-		return LOCTEXT("CurrencyLoading", "...");
+		return LOCTEXT("CurrencyZero", "0 G  0 S  0 K");
 	}
 
 	return Session->GetCurrencySnapshot().AccountBankWallet.Balance.ToDisplayText();
@@ -353,7 +353,7 @@ FText UWUInventoryWidget::GetCurrencyTooltipText() const
 	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
 	if (!Session || !Session->HasCurrencySnapshot())
 	{
-		return LOCTEXT("CurrencyLoadingTooltip", "Loading currency...");
+		return LOCTEXT("CurrencyZeroTooltip", "Carried: 0 Knuts\nBank: 0 Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon");
 	}
 
 	const FWUBackendCurrencySnapshot& Snapshot = Session->GetCurrencySnapshot();
