@@ -1,4 +1,5 @@
 using WU.Domain.Characters;
+using WU.Application.Clubs;
 
 namespace WU.Application.Characters;
 
@@ -9,6 +10,7 @@ public sealed record CharacterSummary(
     EWuCharacterSex Sex,
     EWuHouse House,
     CharacterAppearanceDraft Appearance,
+    CharacterClubSummary? Club,
     int Level,
     int Experience,
     int ExperienceToNextLevel,

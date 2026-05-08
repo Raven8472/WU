@@ -108,11 +108,41 @@ struct FWUBackendCharacterSummary
 	FWUBackendCharacterLocation Location;
 };
 
+USTRUCT(BlueprintType)
+struct FWUBackendClubInviteSummary
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FString InviteId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FString ClubId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FString InvitedCharacterId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FString InvitedByCharacterId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FString Status;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FDateTime CreatedAtUtc;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Club")
+	FDateTime ExpiresAtUtc;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUClientSessionSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionErrorSignature, const FString&, ErrorMessage);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharactersSignature, const TArray<FWUBackendCharacterSummary>&, Characters);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterSignature, const FWUBackendCharacterSummary&, Character);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterDeletedSignature, const FString&, CharacterId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubSignature, const FWUClubSummary&, Club);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubInviteSignature, const FWUBackendClubInviteSummary&, Invite);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubMembersSignature, const TArray<FWUClubMemberSummary>&, Members);
 
 /**
  * Client-side bridge to the WU persistence backend.
@@ -145,6 +175,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionCharacterDeletedSignature OnCharacterDeleted;
 
+	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
+	FWUClientSessionClubSignature OnClubCreated;
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
+	FWUClientSessionClubInviteSignature OnClubInviteCreated;
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
+	FWUClientSessionClubMembersSignature OnClubRosterLoaded;
+
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionErrorSignature OnRequestFailed;
 
@@ -171,6 +210,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Club")
+	void CreateClub(const FString& Name, const FString& Tag, const FString& Description);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Club")
+	void InviteCharacterToSelectedClub(const FString& InvitedCharacterId);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Club")
+	void LoadSelectedClubRoster(bool bIncludeOffline);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
@@ -214,6 +262,9 @@ private:
 	void HandleDeleteCharacterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded, FString CharacterId);
 	void HandleSaveCharacterLocationResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleAwardCharacterExperienceResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleCreateClubResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
@@ -230,12 +281,17 @@ private:
 	static bool TryParseRealm(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendRealmSummary& OutRealm);
 	static bool TryParseCharacter(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterSummary& OutCharacter);
 	static bool TryParseClubSummary(const TSharedPtr<FJsonObject>& JsonObject, FWUClubSummary& OutClub);
+	static bool TryParseClubInvite(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendClubInviteSummary& OutInvite);
+	static bool TryParseClubMember(const TSharedPtr<FJsonObject>& JsonObject, FWUClubMemberSummary& OutMember);
 	static bool TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation);
 	static bool TryParseRace(const FString& Value, EWUCharacterRace& OutRace);
 	static bool TryParseSex(const FString& Value, EWUCharacterSex& OutSex);
 	static bool TryParseHouseFaction(const FString& Value, EWUHouseFaction& OutHouseFaction);
 	static bool TryParseClubRank(const FString& Value, EWUClubRank& OutRank);
+	static bool TryParseDateTimeUtc(const FString& Value, FDateTime& OutDateTime);
 	static FString ExperienceSourceToString(EWUExperienceSource Source);
+	FWUBackendCharacterSummary* FindMutableCachedCharacter(const FString& CharacterId);
+	const FWUBackendCharacterSummary* FindCachedCharacter(const FString& CharacterId) const;
 	bool UpdateCachedCharacter(const FWUBackendCharacterSummary& UpdatedCharacter);
 
 private:

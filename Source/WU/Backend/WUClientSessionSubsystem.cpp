@@ -174,6 +174,99 @@ void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, E
 	Request->ProcessRequest();
 }
 
+void UWUClientSessionSubsystem::CreateClub(const FString& Name, const FString& Tag, const FString& Description)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before creating a club."));
+		return;
+	}
+
+	FString TrimmedName = Name;
+	TrimmedName.TrimStartAndEndInline();
+	if (TrimmedName.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Club name is required."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
+	RootObject->SetStringField(TEXT("presidentCharacterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("name"), TrimmedName);
+	RootObject->SetStringField(TEXT("tag"), Tag.TrimStartAndEnd());
+	RootObject->SetStringField(TEXT("description"), Description.TrimStartAndEnd());
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/clubs"));
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateClubResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::InviteCharacterToSelectedClub(const FString& InvitedCharacterId)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before inviting to a club."));
+		return;
+	}
+
+	if (InvitedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Choose a character to invite."));
+		return;
+	}
+
+	if (InvitedCharacterId == SelectedCharacterId)
+	{
+		OnRequestFailed.Broadcast(TEXT("A character cannot invite itself."));
+		return;
+	}
+
+	const FWUBackendCharacterSummary* SelectedCharacter = FindCachedCharacter(SelectedCharacterId);
+	if (!SelectedCharacter || !SelectedCharacter->Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("The selected character is not in a club."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetStringField(TEXT("inviterCharacterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("invitedCharacterId"), InvitedCharacterId);
+
+	const FString Path = FString::Printf(TEXT("/api/clubs/%s/invites"), *SelectedCharacter->Club.ClubId);
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleInviteClubMemberResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::LoadSelectedClubRoster(bool bIncludeOffline)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before loading a club roster."));
+		return;
+	}
+
+	const FWUBackendCharacterSummary* SelectedCharacter = FindCachedCharacter(SelectedCharacterId);
+	if (!SelectedCharacter || !SelectedCharacter->Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("The selected character is not in a club."));
+		return;
+	}
+
+	const TCHAR* IncludeOfflineValue = bIncludeOffline ? TEXT("true") : TEXT("false");
+	const FString Path = FString::Printf(
+		TEXT("/api/clubs/%s/roster?viewerCharacterId=%s&includeOffline=%s"),
+		*SelectedCharacter->Club.ClubId,
+		*SelectedCharacterId,
+		IncludeOfflineValue);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("GET"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleLoadClubRosterResponse);
+	Request->ProcessRequest();
+}
+
 void UWUClientSessionSubsystem::ClearSession()
 {
 	AccessToken.Reset();
@@ -490,6 +583,101 @@ void UWUClientSessionSubsystem::HandleAwardCharacterExperienceResponse(FHttpRequ
 	}
 }
 
+void UWUClientSessionSubsystem::HandleCreateClubResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()) && Response->GetResponseCode() != EHttpResponseCodes::Created)
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUClubSummary Club;
+	if (!TryParseClubSummary(RootObject, Club) || !Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("Create club response did not include a valid club."));
+		return;
+	}
+
+	if (FWUBackendCharacterSummary* SelectedCharacter = FindMutableCachedCharacter(SelectedCharacterId))
+	{
+		SelectedCharacter->Club = Club;
+		OnCharacterUpdated.Broadcast(*SelectedCharacter);
+		OnCharactersLoaded.Broadcast(Characters);
+	}
+
+	OnClubCreated.Broadcast(Club);
+}
+
+void UWUClientSessionSubsystem::HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()) && Response->GetResponseCode() != EHttpResponseCodes::Created)
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendClubInviteSummary Invite;
+	if (!TryParseClubInvite(RootObject, Invite))
+	{
+		OnRequestFailed.Broadcast(TEXT("Club invite response did not include a valid invite."));
+		return;
+	}
+
+	OnClubInviteCreated.Broadcast(Invite);
+}
+
+void UWUClientSessionSubsystem::HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* MemberValues = nullptr;
+	if (!RootObject->TryGetArrayField(TEXT("members"), MemberValues))
+	{
+		OnRequestFailed.Broadcast(TEXT("Club roster response did not include members."));
+		return;
+	}
+
+	TArray<FWUClubMemberSummary> Members;
+	for (const TSharedPtr<FJsonValue>& MemberValue : *MemberValues)
+	{
+		FWUClubMemberSummary Member;
+		if (TryParseClubMember(MemberValue->AsObject(), Member))
+		{
+			Members.Add(Member);
+		}
+	}
+
+	OnClubRosterLoaded.Broadcast(Members);
+}
+
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateRequest(const FString& Verb, const FString& Path) const
 {
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -772,6 +960,83 @@ bool UWUClientSessionSubsystem::TryParseClubSummary(const TSharedPtr<FJsonObject
 	return true;
 }
 
+bool UWUClientSessionSubsystem::TryParseClubInvite(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendClubInviteSummary& OutInvite)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString CreatedAtValue;
+	if (!JsonObject->TryGetStringField(TEXT("inviteId"), OutInvite.InviteId)
+		|| !JsonObject->TryGetStringField(TEXT("clubId"), OutInvite.ClubId)
+		|| !JsonObject->TryGetStringField(TEXT("invitedCharacterId"), OutInvite.InvitedCharacterId)
+		|| !JsonObject->TryGetStringField(TEXT("status"), OutInvite.Status)
+		|| !JsonObject->TryGetStringField(TEXT("createdAt"), CreatedAtValue)
+		|| !TryParseDateTimeUtc(CreatedAtValue, OutInvite.CreatedAtUtc))
+	{
+		return false;
+	}
+
+	JsonObject->TryGetStringField(TEXT("invitedByCharacterId"), OutInvite.InvitedByCharacterId);
+
+	FString ExpiresAtValue;
+	if (JsonObject->TryGetStringField(TEXT("expiresAt"), ExpiresAtValue))
+	{
+		TryParseDateTimeUtc(ExpiresAtValue, OutInvite.ExpiresAtUtc);
+	}
+
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseClubMember(const TSharedPtr<FJsonObject>& JsonObject, FWUClubMemberSummary& OutMember)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString RankValue;
+	FString HouseValue;
+	double LevelValue = 1.0;
+	if (!JsonObject->TryGetStringField(TEXT("characterId"), OutMember.CharacterId)
+		|| !JsonObject->TryGetStringField(TEXT("rank"), RankValue)
+		|| !JsonObject->TryGetNumberField(TEXT("level"), LevelValue))
+	{
+		return false;
+	}
+
+	if (!JsonObject->TryGetStringField(TEXT("name"), OutMember.DisplayName))
+	{
+		JsonObject->TryGetStringField(TEXT("displayName"), OutMember.DisplayName);
+	}
+
+	if (!TryParseClubRank(RankValue, OutMember.Rank))
+	{
+		return false;
+	}
+
+	if (JsonObject->TryGetStringField(TEXT("house"), HouseValue) || JsonObject->TryGetStringField(TEXT("houseFaction"), HouseValue))
+	{
+		TryParseHouseFaction(HouseValue, OutMember.HouseFaction);
+	}
+
+	OutMember.Level = FMath::Max(1, FMath::RoundToInt(LevelValue));
+	JsonObject->TryGetStringField(TEXT("path"), OutMember.Path);
+	JsonObject->TryGetStringField(TEXT("locationDisplayName"), OutMember.LocationDisplayName);
+	JsonObject->TryGetBoolField(TEXT("isOnline"), OutMember.bIsOnline);
+	JsonObject->TryGetStringField(TEXT("publicNote"), OutMember.PublicNote);
+	JsonObject->TryGetStringField(TEXT("officerNote"), OutMember.OfficerNote);
+
+	FString LastOnlineAtValue;
+	if (JsonObject->TryGetStringField(TEXT("lastOnlineAt"), LastOnlineAtValue))
+	{
+		TryParseDateTimeUtc(LastOnlineAtValue, OutMember.LastOnlineUtc);
+	}
+
+	return !OutMember.CharacterId.IsEmpty() && !OutMember.DisplayName.IsEmpty();
+}
+
 bool UWUClientSessionSubsystem::TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation)
 {
 	if (!JsonObject.IsValid())
@@ -845,6 +1110,16 @@ bool UWUClientSessionSubsystem::TryParseClubRank(const FString& Value, EWUClubRa
 	return WUIdentity::TryParseClubRank(Value, OutRank);
 }
 
+bool UWUClientSessionSubsystem::TryParseDateTimeUtc(const FString& Value, FDateTime& OutDateTime)
+{
+	if (Value.IsEmpty())
+	{
+		return false;
+	}
+
+	return FDateTime::ParseIso8601(*Value, OutDateTime);
+}
+
 FString UWUClientSessionSubsystem::ExperienceSourceToString(EWUExperienceSource Source)
 {
 	switch (Source)
@@ -861,6 +1136,32 @@ FString UWUClientSessionSubsystem::ExperienceSourceToString(EWUExperienceSource 
 	default:
 		return TEXT("Kill");
 	}
+}
+
+FWUBackendCharacterSummary* UWUClientSessionSubsystem::FindMutableCachedCharacter(const FString& CharacterId)
+{
+	for (FWUBackendCharacterSummary& Character : Characters)
+	{
+		if (Character.CharacterId == CharacterId)
+		{
+			return &Character;
+		}
+	}
+
+	return nullptr;
+}
+
+const FWUBackendCharacterSummary* UWUClientSessionSubsystem::FindCachedCharacter(const FString& CharacterId) const
+{
+	for (const FWUBackendCharacterSummary& Character : Characters)
+	{
+		if (Character.CharacterId == CharacterId)
+		{
+			return &Character;
+		}
+	}
+
+	return nullptr;
 }
 
 bool UWUClientSessionSubsystem::UpdateCachedCharacter(const FWUBackendCharacterSummary& UpdatedCharacter)

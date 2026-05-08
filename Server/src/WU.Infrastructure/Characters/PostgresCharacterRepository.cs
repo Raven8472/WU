@@ -1,7 +1,9 @@
 using Npgsql;
 using NpgsqlTypes;
 using WU.Application.Characters;
+using WU.Application.Clubs;
 using WU.Domain.Characters;
+using WU.Domain.Clubs;
 
 namespace WU.Infrastructure.Characters;
 
@@ -30,6 +32,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 command.Sex,
                 EWuHouse.Unsorted,
                 command.Appearance,
+                null,
                 startingLevel,
                 0,
                 CharacterStatRules.GetExperienceToNextLevel(startingLevel),
@@ -60,9 +63,19 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                    COALESCE(ca.hair_color_index, 0) AS hair_color_index,
                    COALESCE(ca.eye_color_index, 1) AS eye_color_index,
                    COALESCE(ca.brow_style_index, 0) AS brow_style_index,
-                   COALESCE(ca.beard_style_index, 0) AS beard_style_index
+                   COALESCE(ca.beard_style_index, 0) AS beard_style_index,
+                   cl.id AS club_id,
+                   COALESCE(cl.name, '') AS club_name,
+                   COALESCE(cl.tag, '') AS club_tag,
+                   COALESCE(cm.rank, 0) AS club_rank,
+                   COALESCE(crp.permissions_mask, 0) AS club_permissions_mask,
+                   COALESCE(cm.public_note, '') AS club_public_note,
+                   COALESCE(cm.officer_note, '') AS club_officer_note
             FROM characters c
             LEFT JOIN character_appearances ca ON ca.character_id = c.id
+            LEFT JOIN club_members cm ON cm.character_id = c.id
+            LEFT JOIN clubs cl ON cl.id = cm.club_id AND cl.disbanded_at IS NULL
+            LEFT JOIN club_rank_permissions crp ON crp.club_id = cl.id AND crp.rank = cm.rank
             WHERE c.account_id = @account_id
               AND c.realm_id = @realm_id
               AND c.deleted_at IS NULL
@@ -172,9 +185,19 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                    COALESCE(ca.hair_color_index, 0) AS hair_color_index,
                    COALESCE(ca.eye_color_index, 1) AS eye_color_index,
                    COALESCE(ca.brow_style_index, 0) AS brow_style_index,
-                   COALESCE(ca.beard_style_index, 0) AS beard_style_index
+                   COALESCE(ca.beard_style_index, 0) AS beard_style_index,
+                   cl.id AS club_id,
+                   COALESCE(cl.name, '') AS club_name,
+                   COALESCE(cl.tag, '') AS club_tag,
+                   COALESCE(cm.rank, 0) AS club_rank,
+                   COALESCE(crp.permissions_mask, 0) AS club_permissions_mask,
+                   COALESCE(cm.public_note, '') AS club_public_note,
+                   COALESCE(cm.officer_note, '') AS club_officer_note
             FROM updated u
-            LEFT JOIN character_appearances ca ON ca.character_id = u.id;
+            LEFT JOIN character_appearances ca ON ca.character_id = u.id
+            LEFT JOIN club_members cm ON cm.character_id = u.id
+            LEFT JOIN clubs cl ON cl.id = cm.club_id AND cl.disbanded_at IS NULL
+            LEFT JOIN club_rank_permissions crp ON crp.club_id = cl.id AND crp.rank = cm.rank;
             """;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -299,6 +322,16 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         var level = reader.GetInt32(5);
         var experience = reader.GetInt32(6);
         var normalizedProgression = CharacterStatRules.ResolveExperienceAward(level, experience, 0);
+        var club = reader.IsDBNull(17)
+            ? null
+            : new CharacterClubSummary(
+                ClubId: reader.GetGuid(17),
+                Name: reader.GetString(18),
+                Tag: reader.GetString(19),
+                Rank: (EWuClubRank)reader.GetInt16(20),
+                PermissionsMask: reader.GetInt32(21),
+                PublicNote: reader.GetString(22),
+                OfficerNote: reader.GetString(23));
 
         return new CharacterSummary(
             CharacterId: reader.GetGuid(0),
@@ -314,6 +347,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 EyeColorIndex: reader.GetInt32(14),
                 BrowStyleIndex: reader.GetInt32(15),
                 BeardStyleIndex: reader.GetInt32(16)),
+            Club: club,
             Level: normalizedProgression.Level,
             Experience: normalizedProgression.Experience,
             ExperienceToNextLevel: normalizedProgression.ExperienceToNextLevel,
@@ -364,14 +398,24 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                    COALESCE(ca.hair_color_index, 0) AS hair_color_index,
                    COALESCE(ca.eye_color_index, 1) AS eye_color_index,
                    COALESCE(ca.brow_style_index, 0) AS brow_style_index,
-                   COALESCE(ca.beard_style_index, 0) AS beard_style_index
+                   COALESCE(ca.beard_style_index, 0) AS beard_style_index,
+                   cl.id AS club_id,
+                   COALESCE(cl.name, '') AS club_name,
+                   COALESCE(cl.tag, '') AS club_tag,
+                   COALESCE(cm.rank, 0) AS club_rank,
+                   COALESCE(crp.permissions_mask, 0) AS club_permissions_mask,
+                   COALESCE(cm.public_note, '') AS club_public_note,
+                   COALESCE(cm.officer_note, '') AS club_officer_note
             FROM characters c
             LEFT JOIN character_appearances ca ON ca.character_id = c.id
+            LEFT JOIN club_members cm ON cm.character_id = c.id
+            LEFT JOIN clubs cl ON cl.id = cm.club_id AND cl.disbanded_at IS NULL
+            LEFT JOIN club_rank_permissions crp ON crp.club_id = cl.id AND crp.rank = cm.rank
             WHERE c.id = @character_id
               AND c.account_id = @account_id
               AND c.realm_id = @realm_id
               AND c.deleted_at IS NULL
-            FOR UPDATE;
+            FOR UPDATE OF c;
             """;
 
         await using var dbCommand = new NpgsqlCommand(sql, connection);
