@@ -5,9 +5,12 @@
 #include "CoreMinimal.h"
 #include "CharacterStats/WUCharacterStats.h"
 #include "CharacterCreation/WUCharacterCreationTypes.h"
+#include "Identity/WUIdentityTypes.h"
 #include "HttpFwd.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "WUClientSessionSubsystem.generated.h"
+
+class FJsonObject;
 
 USTRUCT(BlueprintType)
 struct FWUBackendAccountSummary
@@ -78,7 +81,13 @@ struct FWUBackendCharacterSummary
 	EWUCharacterSex Sex = EWUCharacterSex::Male;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	EWUHouseFaction HouseFaction = EWUHouseFaction::Unsorted;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	FWUCharacterAppearance Appearance;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
+	FWUClubSummary Club;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WU|Session")
 	int32 Level = 1;
@@ -208,7 +217,10 @@ private:
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
+	TSharedPtr<FJsonObject> CreateSessionContextJsonObject() const;
 
+	static void SetJsonBody(const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& Request, const TSharedPtr<FJsonObject>& JsonObject);
+	static FString SerializeJsonObject(const TSharedPtr<FJsonObject>& JsonObject);
 	bool TryDeserializeObject(FHttpResponsePtr Response, TSharedPtr<FJsonObject>& OutJsonObject, FString& OutErrorMessage) const;
 	FString ExtractBackendError(FHttpResponsePtr Response) const;
 	FString BuildUrl(const FString& Path) const;
@@ -217,9 +229,12 @@ private:
 	static bool TryParseAccount(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendAccountSummary& OutAccount);
 	static bool TryParseRealm(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendRealmSummary& OutRealm);
 	static bool TryParseCharacter(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterSummary& OutCharacter);
+	static bool TryParseClubSummary(const TSharedPtr<FJsonObject>& JsonObject, FWUClubSummary& OutClub);
 	static bool TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation);
 	static bool TryParseRace(const FString& Value, EWUCharacterRace& OutRace);
 	static bool TryParseSex(const FString& Value, EWUCharacterSex& OutSex);
+	static bool TryParseHouseFaction(const FString& Value, EWUHouseFaction& OutHouseFaction);
+	static bool TryParseClubRank(const FString& Value, EWUClubRank& OutRank);
 	static FString ExperienceSourceToString(EWUExperienceSource Source);
 	bool UpdateCachedCharacter(const FWUBackendCharacterSummary& UpdatedCharacter);
 

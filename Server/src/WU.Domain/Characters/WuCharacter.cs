@@ -7,6 +7,6 @@ public sealed record WuCharacter(
     string Name,
     EWuCharacterRace Race,
     EWuCharacterSex Sex,
-    EWuHouse? House,
+    EWuHouse House,
     int Level,
     int Experience);

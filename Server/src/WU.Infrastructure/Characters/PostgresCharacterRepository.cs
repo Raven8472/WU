@@ -28,6 +28,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 command.Name,
                 command.Race,
                 command.Sex,
+                EWuHouse.Unsorted,
                 command.Appearance,
                 startingLevel,
                 0,
@@ -52,7 +53,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         await EnsureCharacterSchemaAsync(cancellationToken);
 
         const string sql = """
-            SELECT c.id, c.name, c.race, c.sex, c.level, c.experience, c.position_x, c.position_y, c.position_z,
+            SELECT c.id, c.name, c.race, c.sex, c.house, c.level, c.experience, c.position_x, c.position_y, c.position_z,
                    COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
                    COALESCE(ca.head_preset_index, 0) AS head_preset_index,
                    COALESCE(ca.hair_style_index, 0) AS hair_style_index,
@@ -162,9 +163,9 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                   AND account_id = @account_id
                   AND realm_id = @realm_id
                   AND deleted_at IS NULL
-                RETURNING id, name, race, sex, level, experience, position_x, position_y, position_z
+                RETURNING id, name, race, sex, house, level, experience, position_x, position_y, position_z
             )
-            SELECT u.id, u.name, u.race, u.sex, u.level, u.experience, u.position_x, u.position_y, u.position_z,
+            SELECT u.id, u.name, u.race, u.sex, u.house, u.level, u.experience, u.position_x, u.position_y, u.position_z,
                    COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
                    COALESCE(ca.head_preset_index, 0) AS head_preset_index,
                    COALESCE(ca.hair_style_index, 0) AS hair_style_index,
@@ -194,8 +195,8 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     private static async Task<Guid> InsertCharacterAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CreateCharacterCommand command, CancellationToken cancellationToken)
     {
         const string sql = """
-            INSERT INTO characters (account_id, realm_id, name, normalized_name, race, sex)
-            VALUES (@account_id, @realm_id, @name, @normalized_name, @race, @sex)
+            INSERT INTO characters (account_id, realm_id, name, normalized_name, race, sex, house)
+            VALUES (@account_id, @realm_id, @name, @normalized_name, @race, @sex, @house)
             RETURNING id;
             """;
 
@@ -207,6 +208,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         dbCommand.Parameters.AddWithValue("normalized_name", NpgsqlDbType.Text, command.NormalizedName);
         dbCommand.Parameters.AddWithValue("race", NpgsqlDbType.Smallint, (short)command.Race);
         dbCommand.Parameters.AddWithValue("sex", NpgsqlDbType.Smallint, (short)command.Sex);
+        dbCommand.Parameters.AddWithValue("house", NpgsqlDbType.Smallint, (short)EWuHouse.Unsorted);
 
         var result = await dbCommand.ExecuteScalarAsync(cancellationToken);
         return result is Guid id ? id : throw new InvalidOperationException("PostgreSQL did not return a character id.");
@@ -259,7 +261,20 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 ADD COLUMN IF NOT EXISTS beard_style_index integer NOT NULL DEFAULT 0;
 
             ALTER TABLE characters
-                ADD COLUMN IF NOT EXISTS experience integer NOT NULL DEFAULT 0;
+                ADD COLUMN IF NOT EXISTS experience integer NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS house smallint NOT NULL DEFAULT 0;
+
+            UPDATE characters
+            SET house = 0
+            WHERE house IS NULL;
+
+            ALTER TABLE characters
+                ALTER COLUMN house SET DEFAULT 0,
+                ALTER COLUMN house SET NOT NULL;
+
+            ALTER TABLE characters DROP CONSTRAINT IF EXISTS ck_characters_house;
+            ALTER TABLE characters
+                ADD CONSTRAINT ck_characters_house CHECK (house BETWEEN 0 AND 4);
 
             ALTER TABLE characters DROP CONSTRAINT IF EXISTS uq_characters_realm_name;
             CREATE UNIQUE INDEX IF NOT EXISTS uq_characters_realm_name_active
@@ -281,8 +296,8 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
     private static CharacterSummary ReadCharacterSummary(NpgsqlDataReader reader)
     {
         var race = (EWuCharacterRace)reader.GetInt16(2);
-        var level = reader.GetInt32(4);
-        var experience = reader.GetInt32(5);
+        var level = reader.GetInt32(5);
+        var experience = reader.GetInt32(6);
         var normalizedProgression = CharacterStatRules.ResolveExperienceAward(level, experience, 0);
 
         return new CharacterSummary(
@@ -290,22 +305,23 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
             Name: reader.GetString(1),
             Race: race,
             Sex: (EWuCharacterSex)reader.GetInt16(3),
+            House: (EWuHouse)reader.GetInt16(4),
             Appearance: new CharacterAppearanceDraft(
-                SkinPresetIndex: reader.GetInt32(9),
-                HeadPresetIndex: reader.GetInt32(10),
-                HairStyleIndex: reader.GetInt32(11),
-                HairColorIndex: reader.GetInt32(12),
-                EyeColorIndex: reader.GetInt32(13),
-                BrowStyleIndex: reader.GetInt32(14),
-                BeardStyleIndex: reader.GetInt32(15)),
+                SkinPresetIndex: reader.GetInt32(10),
+                HeadPresetIndex: reader.GetInt32(11),
+                HairStyleIndex: reader.GetInt32(12),
+                HairColorIndex: reader.GetInt32(13),
+                EyeColorIndex: reader.GetInt32(14),
+                BrowStyleIndex: reader.GetInt32(15),
+                BeardStyleIndex: reader.GetInt32(16)),
             Level: normalizedProgression.Level,
             Experience: normalizedProgression.Experience,
             ExperienceToNextLevel: normalizedProgression.ExperienceToNextLevel,
             Stats: CharacterStatRules.Calculate(race, normalizedProgression.Level),
             Location: new CharacterLocation(
-                X: reader.GetFloat(6),
-                Y: reader.GetFloat(7),
-                Z: reader.GetFloat(8)));
+                X: reader.GetFloat(7),
+                Y: reader.GetFloat(8),
+                Z: reader.GetFloat(9)));
     }
 
     private static async Task UpdateCharacterProgressionAsync(
@@ -341,7 +357,7 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT c.id, c.name, c.race, c.sex, c.level, c.experience, c.position_x, c.position_y, c.position_z,
+            SELECT c.id, c.name, c.race, c.sex, c.house, c.level, c.experience, c.position_x, c.position_y, c.position_z,
                    COALESCE(ca.skin_preset_index, 0) AS skin_preset_index,
                    COALESCE(ca.head_preset_index, 0) AS head_preset_index,
                    COALESCE(ca.hair_style_index, 0) AS hair_style_index,

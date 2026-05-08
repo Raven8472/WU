@@ -2,8 +2,9 @@ namespace WU.Domain.Characters;
 
 public enum EWuHouse : short
 {
-    HouseOne = 0,
-    HouseTwo = 1,
-    HouseThree = 2,
-    HouseFour = 3
+    Unsorted = 0,
+    Gryffindor = 1,
+    Hufflepuff = 2,
+    Ravenclaw = 3,
+    Slytherin = 4
 }

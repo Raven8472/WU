@@ -77,9 +77,7 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 		return;
 	}
 
-	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
-	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
-	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 	RootObject->SetStringField(TEXT("name"), RequestData.CharacterName);
 	RootObject->SetStringField(TEXT("race"), WUCharacterCreation::RaceToString(RequestData.Race));
 	RootObject->SetStringField(TEXT("sex"), WUCharacterCreation::SexToString(RequestData.Sex));
@@ -94,12 +92,8 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 	AppearanceObject->SetNumberField(TEXT("beardStyleIndex"), RequestData.BeardStyleIndex);
 	RootObject->SetObjectField(TEXT("appearance"), AppearanceObject);
 
-	FString Body;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
-	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
-
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/characters"));
-	Request->SetContentAsString(Body);
+	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateCharacterResponse);
 	Request->ProcessRequest();
 }
@@ -141,9 +135,7 @@ void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Loc
 		return;
 	}
 
-	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
-	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
-	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 
 	TSharedPtr<FJsonObject> LocationObject = MakeShared<FJsonObject>();
 	LocationObject->SetNumberField(TEXT("x"), Location.X);
@@ -151,13 +143,9 @@ void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Loc
 	LocationObject->SetNumberField(TEXT("z"), Location.Z);
 	RootObject->SetObjectField(TEXT("location"), LocationObject);
 
-	FString Body;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
-	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
-
 	const FString Path = FString::Printf(TEXT("/api/characters/%s/location"), *SelectedCharacterId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("PUT"), Path);
-	Request->SetContentAsString(Body);
+	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleSaveCharacterLocationResponse);
 	Request->ProcessRequest();
 }
@@ -175,19 +163,13 @@ void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, E
 		return;
 	}
 
-	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
-	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
-	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 	RootObject->SetNumberField(TEXT("amount"), Amount);
 	RootObject->SetStringField(TEXT("source"), ExperienceSourceToString(Source));
 
-	FString Body;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
-	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
-
 	const FString Path = FString::Printf(TEXT("/api/characters/%s/experience"), *SelectedCharacterId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
-	Request->SetContentAsString(Body);
+	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleAwardCharacterExperienceResponse);
 	Request->ProcessRequest();
 }
@@ -529,6 +511,31 @@ TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateA
 	return Request;
 }
 
+TSharedPtr<FJsonObject> UWUClientSessionSubsystem::CreateSessionContextJsonObject() const
+{
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
+	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	return RootObject;
+}
+
+void UWUClientSessionSubsystem::SetJsonBody(const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& Request, const TSharedPtr<FJsonObject>& JsonObject)
+{
+	Request->SetContentAsString(SerializeJsonObject(JsonObject));
+}
+
+FString UWUClientSessionSubsystem::SerializeJsonObject(const TSharedPtr<FJsonObject>& JsonObject)
+{
+	FString Body;
+	if (JsonObject.IsValid())
+	{
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+		FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
+	}
+
+	return Body;
+}
+
 bool UWUClientSessionSubsystem::TryDeserializeObject(FHttpResponsePtr Response, TSharedPtr<FJsonObject>& OutJsonObject, FString& OutErrorMessage) const
 {
 	if (!Response.IsValid())
@@ -639,6 +646,7 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 
 	FString RaceValue;
 	FString SexValue;
+	FString HouseValue;
 	double LevelValue = 1.0;
 	double ExperienceValue = 0.0;
 	double ExperienceToNextLevelValue = static_cast<double>(WUCharacterStats::GetExperienceToNextLevel(1));
@@ -654,6 +662,18 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 	if (!TryParseRace(RaceValue, OutCharacter.Race) || !TryParseSex(SexValue, OutCharacter.Sex))
 	{
 		return false;
+	}
+
+	if (JsonObject->TryGetStringField(TEXT("house"), HouseValue) || JsonObject->TryGetStringField(TEXT("houseFaction"), HouseValue))
+	{
+		if (!TryParseHouseFaction(HouseValue, OutCharacter.HouseFaction))
+		{
+			return false;
+		}
+	}
+	else
+	{
+		OutCharacter.HouseFaction = EWUHouseFaction::Unsorted;
 	}
 
 	OutCharacter.Appearance.Sex = OutCharacter.Sex;
@@ -707,12 +727,48 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 		OutCharacter.Appearance.BeardStyleIndex = FMath::Max(0, FMath::RoundToInt(BeardStyleIndex));
 	}
 
+	const TSharedPtr<FJsonObject>* ClubObject = nullptr;
+	OutCharacter.Club = FWUClubSummary();
+	if (JsonObject->TryGetObjectField(TEXT("club"), ClubObject) && ClubObject && ClubObject->IsValid())
+	{
+		TryParseClubSummary(*ClubObject, OutCharacter.Club);
+	}
+
 	const TSharedPtr<FJsonObject>* LocationObject = nullptr;
 	if (JsonObject->TryGetObjectField(TEXT("location"), LocationObject))
 	{
 		TryParseLocation(*LocationObject, OutCharacter.Location);
 	}
 
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseClubSummary(const TSharedPtr<FJsonObject>& JsonObject, FWUClubSummary& OutClub)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString RankValue;
+	JsonObject->TryGetStringField(TEXT("clubId"), OutClub.ClubId);
+	JsonObject->TryGetStringField(TEXT("name"), OutClub.Name);
+	JsonObject->TryGetStringField(TEXT("tag"), OutClub.Tag);
+	JsonObject->TryGetStringField(TEXT("publicNote"), OutClub.PublicNote);
+	JsonObject->TryGetStringField(TEXT("officerNote"), OutClub.OfficerNote);
+
+	double PermissionsMask = 0.0;
+	if (JsonObject->TryGetNumberField(TEXT("permissionsMask"), PermissionsMask))
+	{
+		OutClub.PermissionsMask = FMath::Max(0, FMath::RoundToInt(PermissionsMask));
+	}
+
+	if (JsonObject->TryGetStringField(TEXT("rank"), RankValue))
+	{
+		return TryParseClubRank(RankValue, OutClub.Rank);
+	}
+
+	OutClub.Rank = OutClub.HasClub() ? EWUClubRank::Member : EWUClubRank::None;
 	return true;
 }
 
@@ -777,6 +833,16 @@ bool UWUClientSessionSubsystem::TryParseSex(const FString& Value, EWUCharacterSe
 	}
 
 	return false;
+}
+
+bool UWUClientSessionSubsystem::TryParseHouseFaction(const FString& Value, EWUHouseFaction& OutHouseFaction)
+{
+	return WUIdentity::TryParseHouseFaction(Value, OutHouseFaction);
+}
+
+bool UWUClientSessionSubsystem::TryParseClubRank(const FString& Value, EWUClubRank& OutRank)
+{
+	return WUIdentity::TryParseClubRank(Value, OutRank);
 }
 
 FString UWUClientSessionSubsystem::ExperienceSourceToString(EWUExperienceSource Source)

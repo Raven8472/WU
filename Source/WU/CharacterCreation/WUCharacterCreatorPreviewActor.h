@@ -76,23 +76,4 @@ private:
 	void ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const;
 	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
 	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
-
-	const TCHAR* GetBodyMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetHeadMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetHairMeshPath(EWUCharacterSex Sex, int32 HairStyleIndex) const;
-	const TCHAR* GetBrowsMeshPath(EWUCharacterSex Sex, int32 BrowStyleIndex) const;
-	const TCHAR* GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const;
-	const TCHAR* GetPantsMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetHandsMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetBracersMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetStarterChestOutfitMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetStarterChestAddOutfitMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetStarterBeltOutfitMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetStarterBootsOutfitMeshPath(EWUCharacterSex Sex) const;
-	const TCHAR* GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const;
-	const TCHAR* GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const;
-	const TCHAR* GetEyeMaterialPath(int32 EyeColorIndex) const;
-	const TCHAR* GetHairMaterialPath(int32 HairColorIndex) const;
-
-	int32 NormalizeIndex(int32 Index, int32 Count) const;
 };
