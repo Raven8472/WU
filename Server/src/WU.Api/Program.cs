@@ -2,11 +2,13 @@ using WU.Application.Backend;
 using WU.Application.Auth;
 using WU.Application.Characters;
 using WU.Application.Clubs;
+using WU.Application.Currency;
 using WU.Domain.Characters;
 using WU.Infrastructure.Auth;
 using WU.Infrastructure.Characters;
 using WU.Infrastructure.Clubs;
 using WU.Infrastructure.Configuration;
+using WU.Infrastructure.Currency;
 using Npgsql;
 using System.Text.Json.Serialization;
 
@@ -32,6 +34,8 @@ builder.Services.AddScoped<CharacterExperienceService>();
 builder.Services.AddScoped<CharacterDeletionService>();
 builder.Services.AddScoped<IClubRepository, PostgresClubRepository>();
 builder.Services.AddScoped<ClubService>();
+builder.Services.AddScoped<ICurrencyRepository, PostgresCurrencyRepository>();
+builder.Services.AddScoped<CurrencyService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
 builder.Services.AddScoped<AuthService>();
@@ -212,6 +216,62 @@ app.MapGet("/api/clubs/{clubId:guid}/roster", async (Guid clubId, Guid viewerCha
         ClubRosterStatus.ViewerNotMember => Results.StatusCode(StatusCodes.Status403Forbidden),
         ClubRosterStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_roster_request", messages = result.Errors }),
         _ => Results.Problem("The club roster could not be loaded.")
+    };
+});
+
+app.MapGet("/api/currency/accounts/{accountId:guid}/realms/{realmId:guid}/characters/{characterId:guid}", async (Guid accountId, Guid realmId, Guid characterId, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.GetSnapshotAsync(accountId, realmId, characterId, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencySnapshotStatus.Found => Results.Ok(result.Snapshot),
+        CurrencySnapshotStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CurrencySnapshotStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_snapshot_request", messages = result.Errors }),
+        _ => Results.Problem("The currency snapshot could not be loaded.")
+    };
+});
+
+app.MapPost("/api/currency/bank/deposit", async (BankCurrencyTransferRequest request, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.DepositToBankAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencyOperationStatus.Completed => Results.Ok(new { result.Snapshot, result.Transaction }),
+        CurrencyOperationStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "The character wallet does not have enough Knuts." }),
+        CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_deposit_request", messages = result.Errors }),
+        _ => Results.Problem("The currency deposit could not be completed.")
+    };
+});
+
+app.MapPost("/api/currency/bank/withdraw", async (BankCurrencyTransferRequest request, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.WithdrawFromBankAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencyOperationStatus.Completed => Results.Ok(new { result.Snapshot, result.Transaction }),
+        CurrencyOperationStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "The account bank wallet does not have enough Knuts." }),
+        CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_withdraw_request", messages = result.Errors }),
+        _ => Results.Problem("The currency withdrawal could not be completed.")
+    };
+});
+
+app.MapPost("/api/currency/transfers/player", async (PlayerCurrencyTransferRequest request, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.TransferToCharacterAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencyOperationStatus.Completed => Results.Ok(new { result.Snapshot, result.TargetCharacterWallet, result.Transaction }),
+        CurrencyOperationStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The sending character could not be found for that account and realm." }),
+        CurrencyOperationStatus.TargetCharacterNotFound => Results.NotFound(new { error = "target_character_not_found", message = "The receiving character could not be found on that realm." }),
+        CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "The sending character wallet does not have enough Knuts." }),
+        CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_transfer_request", messages = result.Errors }),
+        _ => Results.Problem("The currency transfer could not be completed.")
     };
 });
 

@@ -10,6 +10,7 @@ Two future identity systems need to be protected in the architecture:
 
 - `Clubs`: the player social system and stand-in for guilds.
 - `House Factions`: in-world identity groups that shape character flavor, story arc routing, reputation, and presentation.
+- `Wizarding Currency`: character-held and account-bank currency with an auditable transfer ledger.
 
 The main rule: Clubs and House Factions should not be bolted directly into `AWUCharacter` or `AWUPlayerController`. They should become separate identity/social/story systems that the character, UI, backend client, and world systems can read from.
 
@@ -72,6 +73,46 @@ flowchart LR
 `House State` belongs to the character. It should be stable and story-facing.
 
 `Club State` belongs to the character/account relationship inside a realm. It should be social-facing and mutable.
+
+## Wizarding Currency
+
+Currency exchange rates:
+
+```text
+1 Sickle = 29 Knuts
+1 Galleon = 17 Sickles = 493 Knuts
+```
+
+Store balances internally as Knuts. Convert to Galleons/Sickles/Knuts only for UI display.
+
+Recommended wallet model:
+
+- Character wallet: spendable carried currency for one character.
+- Account bank wallet: shared savings wallet per account and realm.
+- Currency ledger: append-only record of every deposit, withdrawal, player transfer, vendor purchase, vendor sale, system grant, or admin adjustment.
+
+Do not model money as inventory item stacks. Inventory can display the character wallet, but backend wallet balances should be transactional rows so vendor purchases, player trades, banks, and future fees cannot duplicate or lose currency.
+
+Database foundation added in:
+
+```text
+Server/db/init/004_currency.sql
+```
+
+Initial tables:
+
+- `character_wallets`: one carried currency wallet per character.
+- `account_bank_wallets`: one shared bank currency wallet per account/realm.
+- `currency_transactions`: ledger entries with source wallet, destination wallet, amount in Knuts, reason, initiator, note, and timestamp.
+
+Initial endpoint families:
+
+```text
+/api/currency/accounts/{accountId}/realms/{realmId}/characters/{characterId}
+/api/currency/bank/deposit
+/api/currency/bank/withdraw
+/api/currency/transfers/player
+```
 
 ## Clubs
 
