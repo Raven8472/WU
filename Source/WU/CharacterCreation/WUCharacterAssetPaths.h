@@ -23,6 +23,7 @@ struct WU_API FWUCharacterAssetPaths
 	static const TCHAR* HeadMaterial(EWUCharacterSex Sex, int32 HeadPresetIndex);
 	static const TCHAR* EyeMaterial(int32 EyeColorIndex);
 	static const TCHAR* HairMaterial(int32 HairColorIndex);
+	static const TCHAR* UnderhairTexture(EWUCharacterSex Sex, int32 HairColorIndex);
 	static const TCHAR* AnimationBlueprint(EWUCharacterSex Sex);
 	static const TCHAR* BackpedalAnimation(EWUCharacterSex Sex, float Right);
 	static const TCHAR* TurnInPlaceAnimation(EWUCharacterSex Sex, float YawDeltaDegrees);

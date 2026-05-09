@@ -4,6 +4,8 @@
 #include "CharacterCreation/WUCharacterAssetPaths.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
 AWUCharacterCreatorPreviewActor::AWUCharacterCreatorPreviewActor()
@@ -215,6 +217,14 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 
 	if (UMaterialInterface* HeadMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::HeadMaterial(Request.Sex, Request.HeadPresetIndex)))
 	{
+		UMaterialInterface* ResolvedHeadMaterial = HeadMaterial;
+		if (UTexture2D* UnderhairTexture = LoadTextureForPath(FWUCharacterAssetPaths::UnderhairTexture(Request.Sex, Request.HairColorIndex)))
+		{
+			UMaterialInstanceDynamic* DynamicHeadMaterial = UMaterialInstanceDynamic::Create(HeadMaterial, this);
+			DynamicHeadMaterial->SetTextureParameterValue(TEXT("Underhair_D"), UnderhairTexture);
+			ResolvedHeadMaterial = DynamicHeadMaterial;
+		}
+
 		bool bAppliedHeadMaterial = false;
 		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
 		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
@@ -225,14 +235,14 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
 			{
-				HeadMeshComponent->SetMaterial(MaterialIndex, HeadMaterial);
+				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
 				bAppliedHeadMaterial = true;
 			}
 		}
 
 		if (!bAppliedHeadMaterial && HeadMeshComponent->GetNumMaterials() > 0)
 		{
-			HeadMeshComponent->SetMaterial(0, HeadMaterial);
+			HeadMeshComponent->SetMaterial(0, ResolvedHeadMaterial);
 		}
 	}
 
@@ -313,4 +323,14 @@ UMaterialInterface* AWUCharacterCreatorPreviewActor::LoadMaterialForPath(const T
 	}
 
 	return LoadObject<UMaterialInterface>(nullptr, AssetPath);
+}
+
+UTexture2D* AWUCharacterCreatorPreviewActor::LoadTextureForPath(const TCHAR* AssetPath) const
+{
+	if (!AssetPath)
+	{
+		return nullptr;
+	}
+
+	return LoadObject<UTexture2D>(nullptr, AssetPath);
 }

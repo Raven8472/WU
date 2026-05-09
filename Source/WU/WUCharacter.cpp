@@ -3,6 +3,7 @@
 #include "WUCharacter.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/Engine.h"
+#include "Engine/Texture2D.h"
 #include "Animation/AnimationAsset.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
@@ -25,6 +26,7 @@
 #include "Blueprint/UserWidget.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "WUPlayerController.h"
 #include "CharacterCreation/WUCharacterAssetPaths.h"
@@ -1546,6 +1548,14 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 
 	if (UMaterialInterface* HeadMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::HeadMaterial(CharacterAppearance.Sex, CharacterAppearance.HeadPresetIndex)))
 	{
+		UMaterialInterface* ResolvedHeadMaterial = HeadMaterial;
+		if (UTexture2D* UnderhairTexture = LoadTextureForPath(FWUCharacterAssetPaths::UnderhairTexture(CharacterAppearance.Sex, CharacterAppearance.HairColorIndex)))
+		{
+			UMaterialInstanceDynamic* DynamicHeadMaterial = UMaterialInstanceDynamic::Create(HeadMaterial, this);
+			DynamicHeadMaterial->SetTextureParameterValue(TEXT("Underhair_D"), UnderhairTexture);
+			ResolvedHeadMaterial = DynamicHeadMaterial;
+		}
+
 		bool bAppliedHeadMaterial = false;
 		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
 		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
@@ -1556,14 +1566,14 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
 			{
-				HeadMeshComponent->SetMaterial(MaterialIndex, HeadMaterial);
+				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
 				bAppliedHeadMaterial = true;
 			}
 		}
 
 		if (!bAppliedHeadMaterial && HeadMeshComponent->GetNumMaterials() > 0)
 		{
-			HeadMeshComponent->SetMaterial(0, HeadMaterial);
+			HeadMeshComponent->SetMaterial(0, ResolvedHeadMaterial);
 		}
 
 		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
@@ -1574,7 +1584,7 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)))
 			{
-				GetMesh()->SetMaterial(MaterialIndex, HeadMaterial);
+				GetMesh()->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
 			}
 		}
 	}
@@ -1753,6 +1763,11 @@ USkeletalMesh* AWUCharacter::LoadSkeletalMeshForPath(const TCHAR* AssetPath) con
 UMaterialInterface* AWUCharacter::LoadMaterialForPath(const TCHAR* AssetPath) const
 {
 	return AssetPath ? LoadObject<UMaterialInterface>(nullptr, AssetPath) : nullptr;
+}
+
+UTexture2D* AWUCharacter::LoadTextureForPath(const TCHAR* AssetPath) const
+{
+	return AssetPath ? LoadObject<UTexture2D>(nullptr, AssetPath) : nullptr;
 }
 
 UAnimationAsset* AWUCharacter::LoadAnimationAssetForPath(const TCHAR* AssetPath) const

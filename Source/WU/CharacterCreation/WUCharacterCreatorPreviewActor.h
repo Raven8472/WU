@@ -11,6 +11,7 @@ class USkeletalMeshComponent;
 class USceneComponent;
 class USkeletalMesh;
 class UMaterialInterface;
+class UTexture2D;
 
 /**
  * Lightweight world preview actor used by the local character creator shell.
@@ -76,4 +77,5 @@ private:
 	void ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const;
 	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
 	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
+	UTexture2D* LoadTextureForPath(const TCHAR* AssetPath) const;
 };

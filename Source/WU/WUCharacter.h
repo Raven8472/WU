@@ -475,6 +475,7 @@ public:
 	bool IsItemVisualLayerRenderable(EWUItemVisualLayer VisualLayer) const;
 	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
 	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
+	UTexture2D* LoadTextureForPath(const TCHAR* AssetPath) const;
 	UAnimationAsset* LoadAnimationAssetForPath(const TCHAR* AssetPath) const;
 	UClass* LoadAnimClassForPath(const TCHAR* AssetPath) const;
 	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience, bool bResetResources);
