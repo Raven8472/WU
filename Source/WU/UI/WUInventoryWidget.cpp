@@ -249,41 +249,13 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateCurrencySection() const
 
 			+ SHorizontalBox::Slot()
 			.AutoWidth()
-			.Padding(FMargin(8.0f, 0.0f, 18.0f, 0.0f))
-			.VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text_Lambda([this]()
-				{
-					return GetCarriedCurrencyText();
-				})
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
-				.ColorAndOpacity(ValueColor)
-				.ShadowOffset(FVector2D(1.0f, 1.0f))
-				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
-			]
-
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			.VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text(LOCTEXT("BankCurrencyLabel", "Bank"))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
-				.ColorAndOpacity(LabelColor)
-				.ShadowOffset(FVector2D(1.0f, 1.0f))
-				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
-			]
-
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
 			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
 			.VAlign(VAlign_Center)
 			[
 				SNew(STextBlock)
 				.Text_Lambda([this]()
 				{
-					return GetBankCurrencyText();
+					return GetCarriedCurrencyText();
 				})
 				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
 				.ColorAndOpacity(ValueColor)
@@ -337,30 +309,18 @@ FText UWUInventoryWidget::GetCarriedCurrencyText() const
 	return Session->GetCurrencySnapshot().CharacterWallet.Balance.ToDisplayText();
 }
 
-FText UWUInventoryWidget::GetBankCurrencyText() const
-{
-	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
-	if (!Session || !Session->HasCurrencySnapshot())
-	{
-		return LOCTEXT("CurrencyZero", "0 G  0 S  0 K");
-	}
-
-	return Session->GetCurrencySnapshot().AccountBankWallet.Balance.ToDisplayText();
-}
-
 FText UWUInventoryWidget::GetCurrencyTooltipText() const
 {
 	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
 	if (!Session || !Session->HasCurrencySnapshot())
 	{
-		return LOCTEXT("CurrencyZeroTooltip", "Carried: 0 Knuts\nBank: 0 Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon");
+		return LOCTEXT("CurrencyZeroTooltip", "Carried: 0 Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon");
 	}
 
 	const FWUBackendCurrencySnapshot& Snapshot = Session->GetCurrencySnapshot();
 	return FText::Format(
-		LOCTEXT("CurrencyTooltip", "Carried: {0} Knuts\nBank: {1} Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon"),
-		FText::AsNumber(Snapshot.CharacterWallet.Balance.BalanceKnuts),
-		FText::AsNumber(Snapshot.AccountBankWallet.Balance.BalanceKnuts));
+		LOCTEXT("CurrencyTooltip", "Carried: {0} Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon"),
+		FText::AsNumber(Snapshot.CharacterWallet.Balance.BalanceKnuts));
 }
 
 TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex)

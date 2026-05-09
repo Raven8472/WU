@@ -90,7 +90,6 @@ private:
 	TSharedRef<SWidget> CreateBagSection(int32 BagIndex);
 	TSharedRef<SWidget> CreateInventorySlot(int32 AbsoluteSlotIndex);
 	FText GetCarriedCurrencyText() const;
-	FText GetBankCurrencyText() const;
 	FText GetCurrencyTooltipText() const;
 	FText GetInventorySlotText(int32 AbsoluteSlotIndex) const;
 	FText GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) const;
