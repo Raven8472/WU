@@ -11,6 +11,8 @@
 
 class UTexture2D;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FWUInventoryItemUseRequestedSignature, int32, SlotIndex, FWUInventoryItem, Item);
+
 /**
  * Native inventory shell for the WU prototype.
  * Shows fixed starter bag capacity without introducing temporary item data.
@@ -38,6 +40,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	int32 GetUnlockedInventorySlotCount() const;
+
+	UPROPERTY(BlueprintAssignable, Category = "Inventory")
+	FWUInventoryItemUseRequestedSignature OnItemUseRequested;
 
 protected:
 	virtual void NativeConstruct() override;

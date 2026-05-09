@@ -441,10 +441,18 @@ FText UWUInventoryWidget::GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) c
 		return LOCTEXT("EmptyInventorySlotTooltip", "Empty");
 	}
 
+	if (WUInventory::IsUsableItem(InventorySlot.Item))
+	{
+		return FText::Format(
+			LOCTEXT("UsableInventorySlotTooltip", "{0}\n{1}"),
+			FText::FromString(InventorySlot.Item.DisplayName),
+			WUInventory::ItemUseTypeToText(InventorySlot.Item.UseType));
+	}
+
 	return FText::Format(
 		LOCTEXT("InventorySlotTooltip", "{0}\n{1}"),
 		FText::FromString(InventorySlot.Item.DisplayName),
-		WUInventory::EquipmentSlotToText(InventorySlot.Item.EquipmentSlot));
+		InventorySlot.Item.bEquippable ? WUInventory::EquipmentSlotToText(InventorySlot.Item.EquipmentSlot) : LOCTEXT("InventoryItemNotEquippable", "Not equippable"));
 }
 
 FSlateColor UWUInventoryWidget::GetInventorySlotTextColor(int32 AbsoluteSlotIndex) const
@@ -479,6 +487,17 @@ FReply UWUInventoryWidget::HandleInventorySlotClicked(int32 AbsoluteSlotIndex)
 	FWUInventorySlot InventorySlot;
 	if (Character && Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) && InventorySlot.bHasItem)
 	{
+		if (WUInventory::IsUsableItem(InventorySlot.Item))
+		{
+			OnItemUseRequested.Broadcast(AbsoluteSlotIndex, InventorySlot.Item);
+			return FReply::Handled();
+		}
+
+		if (!InventorySlot.Item.bEquippable)
+		{
+			return FReply::Handled();
+		}
+
 		Character->EquipInventorySlot(AbsoluteSlotIndex);
 		InvalidateLayoutAndVolatility();
 		return FReply::Handled();

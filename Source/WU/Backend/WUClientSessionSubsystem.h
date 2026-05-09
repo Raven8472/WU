@@ -185,6 +185,27 @@ struct FWUBackendCurrencySnapshot
 	FWUBackendCurrencyWallet AccountBankWallet;
 };
 
+USTRUCT(BlueprintType)
+struct FWUBackendVendorPurchase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Vendor")
+	FString VendorTableId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Vendor")
+	FString ItemId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Vendor")
+	FString DisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Vendor")
+	int64 PriceKnuts = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|Vendor")
+	FWUBackendCurrencySnapshot Snapshot;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUClientSessionSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionErrorSignature, const FString&, ErrorMessage);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharactersSignature, const TArray<FWUBackendCharacterSummary>&, Characters);
@@ -194,6 +215,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubSignature, const
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubInviteSignature, const FWUBackendClubInviteSummary&, Invite);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubMembersSignature, const TArray<FWUClubMemberSummary>&, Members);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCurrencySnapshotSignature, const FWUBackendCurrencySnapshot&, Snapshot);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionVendorPurchaseSignature, const FWUBackendVendorPurchase&, Purchase);
 
 /**
  * Client-side bridge to the WU persistence backend.
@@ -238,6 +260,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "WU|Currency")
 	FWUClientSessionCurrencySnapshotSignature OnCurrencySnapshotLoaded;
 
+	UPROPERTY(BlueprintAssignable, Category = "WU|Vendor")
+	FWUClientSessionVendorPurchaseSignature OnVendorPurchaseCompleted;
+
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionErrorSignature OnRequestFailed;
 
@@ -276,6 +301,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Currency")
 	void RefreshSelectedCurrencySnapshot();
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Vendor")
+	void PurchaseSelectedVendorItem(const FString& VendorTableId, const FString& ItemId);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
@@ -329,6 +357,7 @@ private:
 	void HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleRefreshCurrencySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandlePurchaseVendorItemResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
@@ -347,6 +376,7 @@ private:
 	static bool TryParseClubSummary(const TSharedPtr<FJsonObject>& JsonObject, FWUClubSummary& OutClub);
 	static bool TryParseClubInvite(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendClubInviteSummary& OutInvite);
 	static bool TryParseClubMember(const TSharedPtr<FJsonObject>& JsonObject, FWUClubMemberSummary& OutMember);
+	static bool TryParseVendorPurchase(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendVendorPurchase& OutPurchase);
 	static bool TryParseCurrencySnapshot(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencySnapshot& OutSnapshot);
 	static bool TryParseCurrencyWallet(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyWallet& OutWallet);
 	static bool TryParseCurrencyBreakdown(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyBreakdown& OutBalance);

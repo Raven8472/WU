@@ -301,6 +301,35 @@ void UWUClientSessionSubsystem::RefreshSelectedCurrencySnapshot()
 	Request->ProcessRequest();
 }
 
+void UWUClientSessionSubsystem::PurchaseSelectedVendorItem(const FString& VendorTableId, const FString& ItemId)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before purchasing from a vendor."));
+		return;
+	}
+
+	FString TrimmedVendorTableId = VendorTableId;
+	TrimmedVendorTableId.TrimStartAndEndInline();
+	FString TrimmedItemId = ItemId;
+	TrimmedItemId.TrimStartAndEndInline();
+	if (TrimmedVendorTableId.IsEmpty() || TrimmedItemId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Vendor table and item id are required before purchasing from a vendor."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
+	RootObject->SetStringField(TEXT("characterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("vendorTableId"), TrimmedVendorTableId);
+	RootObject->SetStringField(TEXT("itemId"), TrimmedItemId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/vendors/purchase"));
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandlePurchaseVendorItemResponse);
+	Request->ProcessRequest();
+}
+
 void UWUClientSessionSubsystem::ClearSession()
 {
 	AccessToken.Reset();
@@ -754,6 +783,35 @@ void UWUClientSessionSubsystem::HandleRefreshCurrencySnapshotResponse(FHttpReque
 	OnCurrencySnapshotLoaded.Broadcast(CurrencySnapshot);
 }
 
+void UWUClientSessionSubsystem::HandlePurchaseVendorItemResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendVendorPurchase Purchase;
+	if (!TryParseVendorPurchase(RootObject, Purchase))
+	{
+		OnRequestFailed.Broadcast(TEXT("Vendor purchase response did not include a valid purchase."));
+		return;
+	}
+
+	CurrencySnapshot = Purchase.Snapshot;
+	bHasCurrencySnapshot = true;
+	OnCurrencySnapshotLoaded.Broadcast(CurrencySnapshot);
+	OnVendorPurchaseCompleted.Broadcast(Purchase);
+}
+
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateRequest(const FString& Verb, const FString& Path) const
 {
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -1111,6 +1169,29 @@ bool UWUClientSessionSubsystem::TryParseClubMember(const TSharedPtr<FJsonObject>
 	}
 
 	return !OutMember.CharacterId.IsEmpty() && !OutMember.DisplayName.IsEmpty();
+}
+
+bool UWUClientSessionSubsystem::TryParseVendorPurchase(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendVendorPurchase& OutPurchase)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	double PriceKnuts = 0.0;
+	const TSharedPtr<FJsonObject>* SnapshotObject = nullptr;
+	if (!JsonObject->TryGetStringField(TEXT("vendorTableId"), OutPurchase.VendorTableId)
+		|| !JsonObject->TryGetStringField(TEXT("itemId"), OutPurchase.ItemId)
+		|| !JsonObject->TryGetStringField(TEXT("displayName"), OutPurchase.DisplayName)
+		|| !JsonObject->TryGetNumberField(TEXT("priceKnuts"), PriceKnuts)
+		|| !JsonObject->TryGetObjectField(TEXT("snapshot"), SnapshotObject)
+		|| !TryParseCurrencySnapshot(*SnapshotObject, OutPurchase.Snapshot))
+	{
+		return false;
+	}
+
+	OutPurchase.PriceKnuts = FMath::Max<int64>(0, FMath::RoundToInt64(PriceKnuts));
+	return true;
 }
 
 bool UWUClientSessionSubsystem::TryParseCurrencySnapshot(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencySnapshot& OutSnapshot)

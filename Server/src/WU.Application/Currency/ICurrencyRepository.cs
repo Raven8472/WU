@@ -9,4 +9,6 @@ public interface ICurrencyRepository
     Task<CurrencyOperationResult> WithdrawFromBankAsync(Guid accountId, Guid realmId, Guid characterId, long amountKnuts, string note, CancellationToken cancellationToken);
 
     Task<CurrencyOperationResult> TransferToCharacterAsync(Guid accountId, Guid realmId, Guid fromCharacterId, Guid toCharacterId, long amountKnuts, string note, CancellationToken cancellationToken);
+
+    Task<CurrencyOperationResult> SpendFromCharacterAsync(Guid accountId, Guid realmId, Guid characterId, long amountKnuts, string note, CancellationToken cancellationToken);
 }

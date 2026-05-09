@@ -3,6 +3,7 @@ using WU.Application.Auth;
 using WU.Application.Characters;
 using WU.Application.Clubs;
 using WU.Application.Currency;
+using WU.Application.Vendors;
 using WU.Domain.Characters;
 using WU.Infrastructure.Auth;
 using WU.Infrastructure.Characters;
@@ -36,6 +37,7 @@ builder.Services.AddScoped<IClubRepository, PostgresClubRepository>();
 builder.Services.AddScoped<ClubService>();
 builder.Services.AddScoped<ICurrencyRepository, PostgresCurrencyRepository>();
 builder.Services.AddScoped<CurrencyService>();
+builder.Services.AddScoped<VendorService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
 builder.Services.AddScoped<AuthService>();
@@ -272,6 +274,29 @@ app.MapPost("/api/currency/transfers/player", async (PlayerCurrencyTransferReque
         CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "The sending character wallet does not have enough Knuts." }),
         CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_transfer_request", messages = result.Errors }),
         _ => Results.Problem("The currency transfer could not be completed.")
+    };
+});
+
+app.MapGet("/api/vendors/{vendorTableId}", (string vendorTableId, VendorService service) =>
+{
+    var table = service.FindTable(vendorTableId);
+    return table is null
+        ? Results.NotFound(new { error = "vendor_table_not_found", message = "The vendor table could not be found." })
+        : Results.Ok(table);
+});
+
+app.MapPost("/api/vendors/purchase", async (VendorPurchaseRequest request, VendorService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.PurchaseAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        VendorPurchaseStatus.Purchased => Results.Ok(result.Purchase),
+        VendorPurchaseStatus.ItemNotFound => Results.NotFound(new { error = "vendor_item_not_found", message = "That item is not sold by that vendor table." }),
+        VendorPurchaseStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        VendorPurchaseStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "The character wallet does not have enough Knuts." }),
+        VendorPurchaseStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_vendor_purchase_request", messages = result.Errors }),
+        _ => Results.Problem("The vendor purchase could not be completed.")
     };
 });
 

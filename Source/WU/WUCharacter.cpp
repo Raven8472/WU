@@ -711,6 +711,48 @@ bool AWUCharacter::GetEquippedItem(EWUEquipmentSlot EquipmentSlot, FWUInventoryI
 	return true;
 }
 
+bool AWUCharacter::AddInventoryItemById(FName ItemId)
+{
+	if (!HasAuthority())
+	{
+		ServerAddInventoryItemById(ItemId);
+		return true;
+	}
+
+	if (ItemId.IsNone() || !WUInventory::FindItemDefinition(ItemId))
+	{
+		return false;
+	}
+
+	InitializeInventoryStorage();
+	const bool bAdded = AddItemToInventory(WUInventory::MakeItem(ItemId));
+	if (bAdded)
+	{
+		ForceNetUpdate();
+	}
+
+	return bAdded;
+}
+
+bool AWUCharacter::RemoveInventoryItemAtSlot(int32 SlotIndex)
+{
+	if (!HasAuthority())
+	{
+		ServerRemoveInventoryItemAtSlot(SlotIndex);
+		return true;
+	}
+
+	InitializeInventoryStorage();
+	if (!InventorySlots.IsValidIndex(SlotIndex) || !InventorySlots[SlotIndex].bHasItem)
+	{
+		return false;
+	}
+
+	InventorySlots[SlotIndex] = FWUInventorySlot();
+	ForceNetUpdate();
+	return true;
+}
+
 FWUCharacterAppearance AWUCharacter::GetCharacterAppearance() const
 {
 	return CharacterAppearance;
@@ -1820,6 +1862,16 @@ void AWUCharacter::ServerEquipInventorySlot_Implementation(int32 SlotIndex)
 void AWUCharacter::ServerUnequipEquipmentSlot_Implementation(EWUEquipmentSlot EquipmentSlot)
 {
 	UnequipEquipmentSlot(EquipmentSlot);
+}
+
+void AWUCharacter::ServerAddInventoryItemById_Implementation(FName ItemId)
+{
+	AddInventoryItemById(ItemId);
+}
+
+void AWUCharacter::ServerRemoveInventoryItemAtSlot_Implementation(int32 SlotIndex)
+{
+	RemoveInventoryItemAtSlot(SlotIndex);
 }
 
 void AWUCharacter::StartAttack()

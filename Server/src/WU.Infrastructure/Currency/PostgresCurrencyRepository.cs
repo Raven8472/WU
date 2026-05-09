@@ -182,6 +182,52 @@ public sealed class PostgresCurrencyRepository(NpgsqlDataSource dataSource) : IC
             BuildCharacterWalletSummary(toCharacterId, toCharacterWallet));
     }
 
+    public async Task<CurrencyOperationResult> SpendFromCharacterAsync(Guid accountId, Guid realmId, Guid characterId, long amountKnuts, string note, CancellationToken cancellationToken)
+    {
+        await EnsureCurrencySchemaAsync(cancellationToken);
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        if (!await CharacterExistsForAccountRealmAsync(connection, transaction, accountId, realmId, characterId, cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return CurrencyOperationResult.CharacterNotFound();
+        }
+
+        var characterWallet = await GetOrCreateCharacterWalletAsync(connection, transaction, characterId, cancellationToken);
+        var bankWallet = await GetOrCreateAccountBankWalletAsync(connection, transaction, accountId, realmId, cancellationToken);
+
+        if (characterWallet.BalanceKnuts < amountKnuts)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return CurrencyOperationResult.InsufficientFunds();
+        }
+
+        characterWallet = characterWallet with { BalanceKnuts = characterWallet.BalanceKnuts - amountKnuts };
+        await UpdateCharacterWalletBalanceAsync(connection, transaction, characterWallet, cancellationToken);
+
+        var ledgerEntry = await InsertTransactionAsync(
+            connection,
+            transaction,
+            realmId,
+            EWuCurrencyWalletType.Character,
+            characterWallet.WalletId,
+            EWuCurrencyWalletType.System,
+            null,
+            amountKnuts,
+            EWuCurrencyTransactionReason.VendorPurchase,
+            characterId,
+            note,
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return CurrencyOperationResult.Completed(
+            BuildSnapshot(accountId, characterId, characterWallet, bankWallet),
+            ledgerEntry);
+    }
+
     private async Task EnsureCurrencySchemaAsync(CancellationToken cancellationToken)
     {
         const string sql = """

@@ -335,6 +335,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool GetEquippedItem(EWUEquipmentSlot EquipmentSlot, FWUInventoryItem& OutItem) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool AddInventoryItemById(FName ItemId);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool RemoveInventoryItemAtSlot(int32 SlotIndex);
+
 	UFUNCTION(BlueprintPure, Category = "Appearance")
 	FWUCharacterAppearance GetCharacterAppearance() const;
 
@@ -494,6 +500,12 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerUnequipEquipmentSlot(EWUEquipmentSlot EquipmentSlot);
+
+	UFUNCTION(Server, Reliable)
+	void ServerAddInventoryItemById(FName ItemId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRemoveInventoryItemAtSlot(int32 SlotIndex);
 
 protected:
 

@@ -39,6 +39,43 @@ enum class EWUItemVisualLayer : uint8
 	Boots
 };
 
+UENUM(BlueprintType)
+enum class EWUItemUseType : uint8
+{
+	None,
+	ClubCharter
+};
+
+USTRUCT(BlueprintType)
+struct FWUVendorItem
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Vendor")
+	FName VendorTableId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Vendor")
+	FName ItemId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Vendor")
+	int64 PriceKnuts = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FWUVendorTable
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Vendor")
+	FName VendorTableId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Vendor")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Vendor")
+	TArray<FWUVendorItem> Items;
+};
+
 USTRUCT(BlueprintType)
 struct FWUInventoryItem
 {
@@ -55,6 +92,9 @@ struct FWUInventoryItem
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory")
 	bool bEquippable = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory")
+	EWUItemUseType UseType = EWUItemUseType::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory")
 	FLinearColor ItemTint = FLinearColor(0.80f, 0.72f, 0.52f, 1.0f);
@@ -101,11 +141,24 @@ struct FWUEquipmentSlotEntry
 
 namespace WUInventory
 {
+	constexpr int64 KnutsPerSickle = 29;
+	constexpr int64 SicklesPerGalleon = 17;
+	constexpr int64 KnutsPerGalleon = KnutsPerSickle * SicklesPerGalleon;
+	constexpr int64 ClubCharterPriceKnuts = KnutsPerGalleon + (2 * KnutsPerSickle) + 12;
+
 	const TArray<EWUEquipmentSlot>& GetAllEquipmentSlots();
 	const TArray<FName>& GetStarterEquippedItemIds();
 	const TArray<FName>& GetStarterInventoryItemIds();
+	const TArray<FWUVendorTable>& GetVendorTables();
+	const FWUVendorTable* FindVendorTable(FName VendorTableId);
+	const FWUVendorItem* FindVendorItem(FName VendorTableId, FName ItemId);
 	const FWUInventoryItem* FindItemDefinition(FName ItemId);
 	FWUInventoryItem MakeItem(FName ItemId);
+	bool IsUsableItem(const FWUInventoryItem& Item);
+	FName GetClubCharterItemId();
+	FName GetClubVendorTableId();
 	FText EquipmentSlotToText(EWUEquipmentSlot Slot);
+	FText ItemUseTypeToText(EWUItemUseType UseType);
+	FText FormatCurrencyAmountKnuts(int64 AmountKnuts);
 	FString GetShortItemLabel(const FWUInventoryItem& Item);
 }
