@@ -19,6 +19,15 @@ bool FWUBackendCharacterLocation::IsNearlyZero() const
 	return ToVector().IsNearlyZero();
 }
 
+FText FWUBackendCurrencyBreakdown::ToDisplayText() const
+{
+	return FText::Format(
+		NSLOCTEXT("WUClientSessionSubsystem", "CurrencyBreakdownDisplay", "{0} G  {1} S  {2} K"),
+		FText::AsNumber(Galleons),
+		FText::AsNumber(Sickles),
+		FText::AsNumber(Knuts));
+}
+
 void UWUClientSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -77,9 +86,7 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 		return;
 	}
 
-	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
-	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
-	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 	RootObject->SetStringField(TEXT("name"), RequestData.CharacterName);
 	RootObject->SetStringField(TEXT("race"), WUCharacterCreation::RaceToString(RequestData.Race));
 	RootObject->SetStringField(TEXT("sex"), WUCharacterCreation::SexToString(RequestData.Sex));
@@ -94,12 +101,8 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 	AppearanceObject->SetNumberField(TEXT("beardStyleIndex"), RequestData.BeardStyleIndex);
 	RootObject->SetObjectField(TEXT("appearance"), AppearanceObject);
 
-	FString Body;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
-	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
-
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/characters"));
-	Request->SetContentAsString(Body);
+	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateCharacterResponse);
 	Request->ProcessRequest();
 }
@@ -131,6 +134,14 @@ void UWUClientSessionSubsystem::DeleteCharacter(const FString& CharacterId)
 
 void UWUClientSessionSubsystem::SelectCharacter(const FString& CharacterId)
 {
+	if (SelectedCharacterId != CharacterId)
+	{
+		CurrencySnapshot = FWUBackendCurrencySnapshot();
+		bHasCurrencySnapshot = false;
+		InventorySnapshot = FWUBackendInventorySnapshot();
+		bHasInventorySnapshot = false;
+	}
+
 	SelectedCharacterId = CharacterId;
 }
 
@@ -141,9 +152,7 @@ void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Loc
 		return;
 	}
 
-	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
-	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
-	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 
 	TSharedPtr<FJsonObject> LocationObject = MakeShared<FJsonObject>();
 	LocationObject->SetNumberField(TEXT("x"), Location.X);
@@ -151,13 +160,9 @@ void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Loc
 	LocationObject->SetNumberField(TEXT("z"), Location.Z);
 	RootObject->SetObjectField(TEXT("location"), LocationObject);
 
-	FString Body;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
-	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
-
 	const FString Path = FString::Printf(TEXT("/api/characters/%s/location"), *SelectedCharacterId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("PUT"), Path);
-	Request->SetContentAsString(Body);
+	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleSaveCharacterLocationResponse);
 	Request->ProcessRequest();
 }
@@ -175,20 +180,174 @@ void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, E
 		return;
 	}
 
-	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
-	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
-	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 	RootObject->SetNumberField(TEXT("amount"), Amount);
 	RootObject->SetStringField(TEXT("source"), ExperienceSourceToString(Source));
 
-	FString Body;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
-	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
-
 	const FString Path = FString::Printf(TEXT("/api/characters/%s/experience"), *SelectedCharacterId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
-	Request->SetContentAsString(Body);
+	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleAwardCharacterExperienceResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::CreateClub(const FString& Name, const FString& Tag, const FString& Description)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before creating a club."));
+		return;
+	}
+
+	FString TrimmedName = Name;
+	TrimmedName.TrimStartAndEndInline();
+	if (TrimmedName.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Club name is required."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
+	RootObject->SetStringField(TEXT("presidentCharacterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("name"), TrimmedName);
+	RootObject->SetStringField(TEXT("tag"), Tag.TrimStartAndEnd());
+	RootObject->SetStringField(TEXT("description"), Description.TrimStartAndEnd());
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/clubs"));
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateClubResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::InviteCharacterToSelectedClub(const FString& InvitedCharacterId)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before inviting to a club."));
+		return;
+	}
+
+	if (InvitedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Choose a character to invite."));
+		return;
+	}
+
+	if (InvitedCharacterId == SelectedCharacterId)
+	{
+		OnRequestFailed.Broadcast(TEXT("A character cannot invite itself."));
+		return;
+	}
+
+	const FWUBackendCharacterSummary* SelectedCharacter = FindCachedCharacter(SelectedCharacterId);
+	if (!SelectedCharacter || !SelectedCharacter->Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("The selected character is not in a club."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetStringField(TEXT("inviterCharacterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("invitedCharacterId"), InvitedCharacterId);
+
+	const FString Path = FString::Printf(TEXT("/api/clubs/%s/invites"), *SelectedCharacter->Club.ClubId);
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleInviteClubMemberResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::LoadSelectedClubRoster(bool bIncludeOffline)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before loading a club roster."));
+		return;
+	}
+
+	const FWUBackendCharacterSummary* SelectedCharacter = FindCachedCharacter(SelectedCharacterId);
+	if (!SelectedCharacter || !SelectedCharacter->Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("The selected character is not in a club."));
+		return;
+	}
+
+	const TCHAR* IncludeOfflineValue = bIncludeOffline ? TEXT("true") : TEXT("false");
+	const FString Path = FString::Printf(
+		TEXT("/api/clubs/%s/roster?viewerCharacterId=%s&includeOffline=%s"),
+		*SelectedCharacter->Club.ClubId,
+		*SelectedCharacterId,
+		IncludeOfflineValue);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("GET"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleLoadClubRosterResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::RefreshSelectedCurrencySnapshot()
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before loading currency."));
+		return;
+	}
+
+	const FString Path = FString::Printf(
+		TEXT("/api/currency/accounts/%s/realms/%s/characters/%s"),
+		*Account.AccountId,
+		*SelectedRealmId,
+		*SelectedCharacterId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("GET"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleRefreshCurrencySnapshotResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::RefreshSelectedInventorySnapshot()
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before loading inventory."));
+		return;
+	}
+
+	const FString Path = FString::Printf(
+		TEXT("/api/inventory/accounts/%s/realms/%s/characters/%s"),
+		*Account.AccountId,
+		*SelectedRealmId,
+		*SelectedCharacterId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("GET"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleRefreshInventorySnapshotResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::PurchaseSelectedVendorItem(const FString& VendorTableId, const FString& ItemId)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before purchasing from a vendor."));
+		return;
+	}
+
+	FString TrimmedVendorTableId = VendorTableId;
+	TrimmedVendorTableId.TrimStartAndEndInline();
+	FString TrimmedItemId = ItemId;
+	TrimmedItemId.TrimStartAndEndInline();
+	if (TrimmedVendorTableId.IsEmpty() || TrimmedItemId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Vendor table and item id are required before purchasing from a vendor."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
+	RootObject->SetStringField(TEXT("characterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("vendorTableId"), TrimmedVendorTableId);
+	RootObject->SetStringField(TEXT("itemId"), TrimmedItemId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/vendors/purchase"));
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandlePurchaseVendorItemResponse);
 	Request->ProcessRequest();
 }
 
@@ -200,6 +359,10 @@ void UWUClientSessionSubsystem::ClearSession()
 	SelectedRealmId.Reset();
 	Characters.Reset();
 	SelectedCharacterId.Reset();
+	CurrencySnapshot = FWUBackendCurrencySnapshot();
+	bHasCurrencySnapshot = false;
+	InventorySnapshot = FWUBackendInventorySnapshot();
+	bHasInventorySnapshot = false;
 	OnSessionCleared.Broadcast();
 }
 
@@ -247,6 +410,26 @@ const TArray<FWUBackendCharacterSummary>& UWUClientSessionSubsystem::GetCharacte
 const FString& UWUClientSessionSubsystem::GetSelectedCharacterId() const
 {
 	return SelectedCharacterId;
+}
+
+const FWUBackendCurrencySnapshot& UWUClientSessionSubsystem::GetCurrencySnapshot() const
+{
+	return CurrencySnapshot;
+}
+
+bool UWUClientSessionSubsystem::HasCurrencySnapshot() const
+{
+	return bHasCurrencySnapshot;
+}
+
+const FWUBackendInventorySnapshot& UWUClientSessionSubsystem::GetInventorySnapshot() const
+{
+	return InventorySnapshot;
+}
+
+bool UWUClientSessionSubsystem::HasInventorySnapshot() const
+{
+	return bHasInventorySnapshot;
 }
 
 void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
@@ -303,6 +486,8 @@ void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, 
 	SelectedRealmId = Realms[0].RealmId;
 	Characters.Reset();
 	SelectedCharacterId.Reset();
+	CurrencySnapshot = FWUBackendCurrencySnapshot();
+	bHasCurrencySnapshot = false;
 
 	OnLoginSucceeded.Broadcast();
 	ListCharacters();
@@ -508,6 +693,192 @@ void UWUClientSessionSubsystem::HandleAwardCharacterExperienceResponse(FHttpRequ
 	}
 }
 
+void UWUClientSessionSubsystem::HandleCreateClubResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()) && Response->GetResponseCode() != EHttpResponseCodes::Created)
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUClubSummary Club;
+	if (!TryParseClubSummary(RootObject, Club) || !Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("Create club response did not include a valid club."));
+		return;
+	}
+
+	if (FWUBackendCharacterSummary* SelectedCharacter = FindMutableCachedCharacter(SelectedCharacterId))
+	{
+		SelectedCharacter->Club = Club;
+		OnCharacterUpdated.Broadcast(*SelectedCharacter);
+		OnCharactersLoaded.Broadcast(Characters);
+	}
+
+	OnClubCreated.Broadcast(Club);
+}
+
+void UWUClientSessionSubsystem::HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()) && Response->GetResponseCode() != EHttpResponseCodes::Created)
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendClubInviteSummary Invite;
+	if (!TryParseClubInvite(RootObject, Invite))
+	{
+		OnRequestFailed.Broadcast(TEXT("Club invite response did not include a valid invite."));
+		return;
+	}
+
+	OnClubInviteCreated.Broadcast(Invite);
+}
+
+void UWUClientSessionSubsystem::HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* MemberValues = nullptr;
+	if (!RootObject->TryGetArrayField(TEXT("members"), MemberValues))
+	{
+		OnRequestFailed.Broadcast(TEXT("Club roster response did not include members."));
+		return;
+	}
+
+	TArray<FWUClubMemberSummary> Members;
+	for (const TSharedPtr<FJsonValue>& MemberValue : *MemberValues)
+	{
+		FWUClubMemberSummary Member;
+		if (TryParseClubMember(MemberValue->AsObject(), Member))
+		{
+			Members.Add(Member);
+		}
+	}
+
+	OnClubRosterLoaded.Broadcast(Members);
+}
+
+void UWUClientSessionSubsystem::HandleRefreshCurrencySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendCurrencySnapshot NewSnapshot;
+	if (!TryParseCurrencySnapshot(RootObject, NewSnapshot))
+	{
+		OnRequestFailed.Broadcast(TEXT("Currency snapshot response did not include valid wallets."));
+		return;
+	}
+
+	CurrencySnapshot = NewSnapshot;
+	bHasCurrencySnapshot = true;
+	OnCurrencySnapshotLoaded.Broadcast(CurrencySnapshot);
+}
+
+void UWUClientSessionSubsystem::HandleRefreshInventorySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendInventorySnapshot NewSnapshot;
+	if (!TryParseInventorySnapshot(RootObject, NewSnapshot))
+	{
+		OnRequestFailed.Broadcast(TEXT("Inventory response did not include valid items."));
+		return;
+	}
+
+	InventorySnapshot = NewSnapshot;
+	bHasInventorySnapshot = true;
+	OnInventorySnapshotLoaded.Broadcast(InventorySnapshot);
+}
+
+void UWUClientSessionSubsystem::HandlePurchaseVendorItemResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		OnRequestFailed.Broadcast(ErrorMessage);
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	FWUBackendVendorPurchase Purchase;
+	if (!TryParseVendorPurchase(RootObject, Purchase))
+	{
+		OnRequestFailed.Broadcast(TEXT("Vendor purchase response did not include a valid purchase."));
+		return;
+	}
+
+	CurrencySnapshot = Purchase.Snapshot;
+	bHasCurrencySnapshot = true;
+	OnCurrencySnapshotLoaded.Broadcast(CurrencySnapshot);
+	if (!Purchase.Inventory.CharacterId.IsEmpty())
+	{
+		InventorySnapshot = Purchase.Inventory;
+		bHasInventorySnapshot = true;
+		OnInventorySnapshotLoaded.Broadcast(InventorySnapshot);
+	}
+	OnVendorPurchaseCompleted.Broadcast(Purchase);
+}
+
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateRequest(const FString& Verb, const FString& Path) const
 {
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -527,6 +898,31 @@ TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateA
 	}
 
 	return Request;
+}
+
+TSharedPtr<FJsonObject> UWUClientSessionSubsystem::CreateSessionContextJsonObject() const
+{
+	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
+	RootObject->SetStringField(TEXT("accountId"), Account.AccountId);
+	RootObject->SetStringField(TEXT("realmId"), SelectedRealmId);
+	return RootObject;
+}
+
+void UWUClientSessionSubsystem::SetJsonBody(const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& Request, const TSharedPtr<FJsonObject>& JsonObject)
+{
+	Request->SetContentAsString(SerializeJsonObject(JsonObject));
+}
+
+FString UWUClientSessionSubsystem::SerializeJsonObject(const TSharedPtr<FJsonObject>& JsonObject)
+{
+	FString Body;
+	if (JsonObject.IsValid())
+	{
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+		FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
+	}
+
+	return Body;
 }
 
 bool UWUClientSessionSubsystem::TryDeserializeObject(FHttpResponsePtr Response, TSharedPtr<FJsonObject>& OutJsonObject, FString& OutErrorMessage) const
@@ -559,6 +955,13 @@ FString UWUClientSessionSubsystem::ExtractBackendError(FHttpResponsePtr Response
 	FString ErrorMessage;
 	if (TryDeserializeObject(Response, ErrorObject, ErrorMessage))
 	{
+		FString ErrorCode;
+		if (ErrorObject->TryGetStringField(TEXT("error"), ErrorCode)
+			&& ErrorCode.Equals(TEXT("insufficient_funds"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("You do not have enough money.");
+		}
+
 		FString Message;
 		if (ErrorObject->TryGetStringField(TEXT("message"), Message) && !Message.IsEmpty())
 		{
@@ -639,6 +1042,7 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 
 	FString RaceValue;
 	FString SexValue;
+	FString HouseValue;
 	double LevelValue = 1.0;
 	double ExperienceValue = 0.0;
 	double ExperienceToNextLevelValue = static_cast<double>(WUCharacterStats::GetExperienceToNextLevel(1));
@@ -654,6 +1058,18 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 	if (!TryParseRace(RaceValue, OutCharacter.Race) || !TryParseSex(SexValue, OutCharacter.Sex))
 	{
 		return false;
+	}
+
+	if (JsonObject->TryGetStringField(TEXT("house"), HouseValue) || JsonObject->TryGetStringField(TEXT("houseFaction"), HouseValue))
+	{
+		if (!TryParseHouseFaction(HouseValue, OutCharacter.HouseFaction))
+		{
+			return false;
+		}
+	}
+	else
+	{
+		OutCharacter.HouseFaction = EWUHouseFaction::Unsorted;
 	}
 
 	OutCharacter.Appearance.Sex = OutCharacter.Sex;
@@ -707,12 +1123,263 @@ bool UWUClientSessionSubsystem::TryParseCharacter(const TSharedPtr<FJsonObject>&
 		OutCharacter.Appearance.BeardStyleIndex = FMath::Max(0, FMath::RoundToInt(BeardStyleIndex));
 	}
 
+	const TSharedPtr<FJsonObject>* ClubObject = nullptr;
+	OutCharacter.Club = FWUClubSummary();
+	if (JsonObject->TryGetObjectField(TEXT("club"), ClubObject) && ClubObject && ClubObject->IsValid())
+	{
+		TryParseClubSummary(*ClubObject, OutCharacter.Club);
+	}
+
 	const TSharedPtr<FJsonObject>* LocationObject = nullptr;
 	if (JsonObject->TryGetObjectField(TEXT("location"), LocationObject))
 	{
 		TryParseLocation(*LocationObject, OutCharacter.Location);
 	}
 
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseClubSummary(const TSharedPtr<FJsonObject>& JsonObject, FWUClubSummary& OutClub)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString RankValue;
+	JsonObject->TryGetStringField(TEXT("clubId"), OutClub.ClubId);
+	JsonObject->TryGetStringField(TEXT("name"), OutClub.Name);
+	JsonObject->TryGetStringField(TEXT("tag"), OutClub.Tag);
+	JsonObject->TryGetStringField(TEXT("publicNote"), OutClub.PublicNote);
+	JsonObject->TryGetStringField(TEXT("officerNote"), OutClub.OfficerNote);
+
+	double PermissionsMask = 0.0;
+	if (JsonObject->TryGetNumberField(TEXT("permissionsMask"), PermissionsMask))
+	{
+		OutClub.PermissionsMask = FMath::Max(0, FMath::RoundToInt(PermissionsMask));
+	}
+
+	if (JsonObject->TryGetStringField(TEXT("rank"), RankValue))
+	{
+		return TryParseClubRank(RankValue, OutClub.Rank);
+	}
+
+	OutClub.Rank = OutClub.HasClub() ? EWUClubRank::Member : EWUClubRank::None;
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseClubInvite(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendClubInviteSummary& OutInvite)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString CreatedAtValue;
+	if (!JsonObject->TryGetStringField(TEXT("inviteId"), OutInvite.InviteId)
+		|| !JsonObject->TryGetStringField(TEXT("clubId"), OutInvite.ClubId)
+		|| !JsonObject->TryGetStringField(TEXT("invitedCharacterId"), OutInvite.InvitedCharacterId)
+		|| !JsonObject->TryGetStringField(TEXT("status"), OutInvite.Status)
+		|| !JsonObject->TryGetStringField(TEXT("createdAt"), CreatedAtValue)
+		|| !TryParseDateTimeUtc(CreatedAtValue, OutInvite.CreatedAtUtc))
+	{
+		return false;
+	}
+
+	JsonObject->TryGetStringField(TEXT("invitedByCharacterId"), OutInvite.InvitedByCharacterId);
+
+	FString ExpiresAtValue;
+	if (JsonObject->TryGetStringField(TEXT("expiresAt"), ExpiresAtValue))
+	{
+		TryParseDateTimeUtc(ExpiresAtValue, OutInvite.ExpiresAtUtc);
+	}
+
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseClubMember(const TSharedPtr<FJsonObject>& JsonObject, FWUClubMemberSummary& OutMember)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString RankValue;
+	FString HouseValue;
+	double LevelValue = 1.0;
+	if (!JsonObject->TryGetStringField(TEXT("characterId"), OutMember.CharacterId)
+		|| !JsonObject->TryGetStringField(TEXT("rank"), RankValue)
+		|| !JsonObject->TryGetNumberField(TEXT("level"), LevelValue))
+	{
+		return false;
+	}
+
+	if (!JsonObject->TryGetStringField(TEXT("name"), OutMember.DisplayName))
+	{
+		JsonObject->TryGetStringField(TEXT("displayName"), OutMember.DisplayName);
+	}
+
+	if (!TryParseClubRank(RankValue, OutMember.Rank))
+	{
+		return false;
+	}
+
+	if (JsonObject->TryGetStringField(TEXT("house"), HouseValue) || JsonObject->TryGetStringField(TEXT("houseFaction"), HouseValue))
+	{
+		TryParseHouseFaction(HouseValue, OutMember.HouseFaction);
+	}
+
+	OutMember.Level = FMath::Max(1, FMath::RoundToInt(LevelValue));
+	JsonObject->TryGetStringField(TEXT("path"), OutMember.Path);
+	JsonObject->TryGetStringField(TEXT("locationDisplayName"), OutMember.LocationDisplayName);
+	JsonObject->TryGetBoolField(TEXT("isOnline"), OutMember.bIsOnline);
+	JsonObject->TryGetStringField(TEXT("publicNote"), OutMember.PublicNote);
+	JsonObject->TryGetStringField(TEXT("officerNote"), OutMember.OfficerNote);
+
+	FString LastOnlineAtValue;
+	if (JsonObject->TryGetStringField(TEXT("lastOnlineAt"), LastOnlineAtValue))
+	{
+		TryParseDateTimeUtc(LastOnlineAtValue, OutMember.LastOnlineUtc);
+	}
+
+	return !OutMember.CharacterId.IsEmpty() && !OutMember.DisplayName.IsEmpty();
+}
+
+bool UWUClientSessionSubsystem::TryParseVendorPurchase(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendVendorPurchase& OutPurchase)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	double PriceKnuts = 0.0;
+	const TSharedPtr<FJsonObject>* SnapshotObject = nullptr;
+	const TSharedPtr<FJsonObject>* InventoryObject = nullptr;
+	if (!JsonObject->TryGetStringField(TEXT("vendorTableId"), OutPurchase.VendorTableId)
+		|| !JsonObject->TryGetStringField(TEXT("itemId"), OutPurchase.ItemId)
+		|| !JsonObject->TryGetStringField(TEXT("displayName"), OutPurchase.DisplayName)
+		|| !JsonObject->TryGetNumberField(TEXT("priceKnuts"), PriceKnuts)
+		|| !JsonObject->TryGetObjectField(TEXT("snapshot"), SnapshotObject)
+		|| !TryParseCurrencySnapshot(*SnapshotObject, OutPurchase.Snapshot))
+	{
+		return false;
+	}
+
+	if (JsonObject->TryGetObjectField(TEXT("inventory"), InventoryObject))
+	{
+		TryParseInventorySnapshot(*InventoryObject, OutPurchase.Inventory);
+	}
+
+	OutPurchase.PriceKnuts = FMath::Max<int64>(0, FMath::RoundToInt64(PriceKnuts));
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseInventorySnapshot(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendInventorySnapshot& OutSnapshot)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	if (!JsonObject->TryGetStringField(TEXT("characterId"), OutSnapshot.CharacterId))
+	{
+		return false;
+	}
+
+	OutSnapshot.Items.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* ItemValues = nullptr;
+	if (!JsonObject->TryGetArrayField(TEXT("items"), ItemValues))
+	{
+		return false;
+	}
+
+	for (const TSharedPtr<FJsonValue>& ItemValue : *ItemValues)
+	{
+		const TSharedPtr<FJsonObject> ItemObject = ItemValue.IsValid() ? ItemValue->AsObject() : nullptr;
+		FWUBackendInventoryItem Item;
+		if (TryParseInventoryItem(ItemObject, Item))
+		{
+			OutSnapshot.Items.Add(Item);
+		}
+	}
+
+	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseInventoryItem(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendInventoryItem& OutItem)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	double SlotIndex = 0.0;
+	double Quantity = 1.0;
+	if (!JsonObject->TryGetNumberField(TEXT("slotIndex"), SlotIndex)
+		|| !JsonObject->TryGetStringField(TEXT("itemId"), OutItem.ItemId))
+	{
+		return false;
+	}
+
+	JsonObject->TryGetNumberField(TEXT("quantity"), Quantity);
+	OutItem.SlotIndex = FMath::Max(0, FMath::RoundToInt(SlotIndex));
+	OutItem.Quantity = FMath::Max(1, FMath::RoundToInt(Quantity));
+	return !OutItem.ItemId.IsEmpty();
+}
+
+bool UWUClientSessionSubsystem::TryParseCurrencySnapshot(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencySnapshot& OutSnapshot)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* CharacterWalletObject = nullptr;
+	const TSharedPtr<FJsonObject>* AccountBankWalletObject = nullptr;
+	return JsonObject->TryGetObjectField(TEXT("characterWallet"), CharacterWalletObject)
+		&& JsonObject->TryGetObjectField(TEXT("accountBankWallet"), AccountBankWalletObject)
+		&& TryParseCurrencyWallet(*CharacterWalletObject, OutSnapshot.CharacterWallet)
+		&& TryParseCurrencyWallet(*AccountBankWalletObject, OutSnapshot.AccountBankWallet);
+}
+
+bool UWUClientSessionSubsystem::TryParseCurrencyWallet(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyWallet& OutWallet)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* BalanceObject = nullptr;
+	return JsonObject->TryGetStringField(TEXT("walletId"), OutWallet.WalletId)
+		&& JsonObject->TryGetStringField(TEXT("walletType"), OutWallet.WalletType)
+		&& JsonObject->TryGetStringField(TEXT("ownerId"), OutWallet.OwnerId)
+		&& JsonObject->TryGetObjectField(TEXT("balance"), BalanceObject)
+		&& TryParseCurrencyBreakdown(*BalanceObject, OutWallet.Balance);
+}
+
+bool UWUClientSessionSubsystem::TryParseCurrencyBreakdown(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyBreakdown& OutBalance)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	double BalanceKnuts = 0.0;
+	double Galleons = 0.0;
+	double Sickles = 0.0;
+	double Knuts = 0.0;
+	if (!JsonObject->TryGetNumberField(TEXT("balanceKnuts"), BalanceKnuts)
+		|| !JsonObject->TryGetNumberField(TEXT("galleons"), Galleons)
+		|| !JsonObject->TryGetNumberField(TEXT("sickles"), Sickles)
+		|| !JsonObject->TryGetNumberField(TEXT("knuts"), Knuts))
+	{
+		return false;
+	}
+
+	OutBalance.BalanceKnuts = FMath::Max<int64>(0, FMath::RoundToInt64(BalanceKnuts));
+	OutBalance.Galleons = FMath::Max<int64>(0, FMath::RoundToInt64(Galleons));
+	OutBalance.Sickles = FMath::Max<int64>(0, FMath::RoundToInt64(Sickles));
+	OutBalance.Knuts = FMath::Max<int64>(0, FMath::RoundToInt64(Knuts));
 	return true;
 }
 
@@ -779,6 +1446,26 @@ bool UWUClientSessionSubsystem::TryParseSex(const FString& Value, EWUCharacterSe
 	return false;
 }
 
+bool UWUClientSessionSubsystem::TryParseHouseFaction(const FString& Value, EWUHouseFaction& OutHouseFaction)
+{
+	return WUIdentity::TryParseHouseFaction(Value, OutHouseFaction);
+}
+
+bool UWUClientSessionSubsystem::TryParseClubRank(const FString& Value, EWUClubRank& OutRank)
+{
+	return WUIdentity::TryParseClubRank(Value, OutRank);
+}
+
+bool UWUClientSessionSubsystem::TryParseDateTimeUtc(const FString& Value, FDateTime& OutDateTime)
+{
+	if (Value.IsEmpty())
+	{
+		return false;
+	}
+
+	return FDateTime::ParseIso8601(*Value, OutDateTime);
+}
+
 FString UWUClientSessionSubsystem::ExperienceSourceToString(EWUExperienceSource Source)
 {
 	switch (Source)
@@ -795,6 +1482,32 @@ FString UWUClientSessionSubsystem::ExperienceSourceToString(EWUExperienceSource 
 	default:
 		return TEXT("Kill");
 	}
+}
+
+FWUBackendCharacterSummary* UWUClientSessionSubsystem::FindMutableCachedCharacter(const FString& CharacterId)
+{
+	for (FWUBackendCharacterSummary& Character : Characters)
+	{
+		if (Character.CharacterId == CharacterId)
+		{
+			return &Character;
+		}
+	}
+
+	return nullptr;
+}
+
+const FWUBackendCharacterSummary* UWUClientSessionSubsystem::FindCachedCharacter(const FString& CharacterId) const
+{
+	for (const FWUBackendCharacterSummary& Character : Characters)
+	{
+		if (Character.CharacterId == CharacterId)
+		{
+			return &Character;
+		}
+	}
+
+	return nullptr;
 }
 
 bool UWUClientSessionSubsystem::UpdateCachedCharacter(const FWUBackendCharacterSummary& UpdatedCharacter)

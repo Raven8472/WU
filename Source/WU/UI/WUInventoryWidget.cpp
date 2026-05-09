@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "UI/WUInventoryWidget.h"
+#include "Engine/GameInstance.h"
 #include "InputCoreTypes.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
@@ -19,6 +20,13 @@
 namespace
 {
 	constexpr int32 InventoryColumnsPerBag = 4;
+	constexpr float InventorySlotSpacing = 4.0f;
+	constexpr float InventoryBagSpacing = 16.0f;
+	constexpr float InventoryOuterPaddingX = 36.0f;
+	constexpr float InventoryOuterPaddingY = 48.0f;
+	constexpr float InventoryHeaderAndCurrencyHeight = 146.0f;
+	constexpr float InventoryCapacityLabelWidth = 126.0f;
+	constexpr float InventoryBagSlotSpacing = 6.0f;
 }
 
 UWUInventoryWidget::UWUInventoryWidget(const FObjectInitializer& ObjectInitializer)
@@ -45,15 +53,36 @@ UWUInventoryWidget::UWUInventoryWidget(const FObjectInitializer& ObjectInitializ
 	}
 }
 
+void UWUInventoryWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	if (UWUClientSessionSubsystem* Session = GetSessionSubsystem())
+	{
+		Session->OnCurrencySnapshotLoaded.AddDynamic(this, &UWUInventoryWidget::HandleCurrencySnapshotLoaded);
+	}
+}
+
+void UWUInventoryWidget::NativeDestruct()
+{
+	if (UWUClientSessionSubsystem* Session = GetSessionSubsystem())
+	{
+		Session->OnCurrencySnapshotLoaded.RemoveDynamic(this, &UWUInventoryWidget::HandleCurrencySnapshotLoaded);
+	}
+
+	Super::NativeDestruct();
+}
+
 TSharedRef<SWidget> UWUInventoryWidget::RebuildWidget()
 {
-	ConfigureImageBrush(PanelBrush, PanelTexture, InventorySize, FMargin(0.24f));
+	const FVector2D DesiredInventorySize = GetDesiredInventoryPanelSize();
+	ConfigureImageBrush(PanelBrush, PanelTexture, DesiredInventorySize, FMargin(0.24f));
 	ConfigureImageBrush(SlotBrush, SlotTexture, InventorySlotSize);
 	ConfigureImageBrush(DisabledSlotBrush, DisabledSlotTexture, InventorySlotSize);
 
 	return SNew(SBox)
-		.WidthOverride(InventorySize.X)
-		.HeightOverride(InventorySize.Y)
+		.WidthOverride(DesiredInventorySize.X)
+		.HeightOverride(DesiredInventorySize.Y)
 		.Visibility_UObject(this, &UWUInventoryWidget::GetInventoryVisibility)
 		[
 			SNew(SBorder)
@@ -129,6 +158,13 @@ TSharedRef<SWidget> UWUInventoryWidget::RebuildWidget()
 
 				+ SVerticalBox::Slot()
 				.AutoHeight()
+				.Padding(FMargin(0.0f, 0.0f, 0.0f, 12.0f))
+				[
+					CreateCurrencySection()
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
 				[
 					SNew(SHorizontalBox)
 
@@ -164,6 +200,7 @@ void UWUInventoryWidget::ToggleInventory()
 void UWUInventoryWidget::ShowInventory()
 {
 	bInventoryOpen = true;
+	RequestCurrencySnapshot();
 	InvalidateLayoutAndVolatility();
 }
 
@@ -183,6 +220,31 @@ int32 UWUInventoryWidget::GetUnlockedInventorySlotCount() const
 	return FMath::Max(0, StartingBagCount) * FMath::Max(0, SlotsPerBag);
 }
 
+FVector2D UWUInventoryWidget::GetDesiredInventoryPanelSize() const
+{
+	const int32 VisibleBagCount = GetVisibleBagSectionCount();
+	const int32 RowsPerBag = FMath::Max(1, FMath::DivideAndRoundUp(FMath::Max(1, SlotsPerBag), InventoryColumnsPerBag));
+
+	const float BagGridWidth = (InventoryColumnsPerBag * InventorySlotSize.X)
+		+ ((InventoryColumnsPerBag - 1) * InventorySlotSpacing);
+	const float BagGridHeight = (RowsPerBag * InventorySlotSize.Y)
+		+ ((RowsPerBag - 1) * InventorySlotSpacing);
+	const float BagSectionsWidth = (VisibleBagCount * BagGridWidth)
+		+ (FMath::Max(0, VisibleBagCount - 1) * InventoryBagSpacing);
+	const float BagBarWidth = (FMath::Max(1, TotalBagSlots) * BagSlotSize.X)
+		+ (FMath::Max(0, TotalBagSlots - 1) * InventoryBagSlotSpacing)
+		+ InventoryCapacityLabelWidth;
+
+	return FVector2D(
+		FMath::Max(InventorySize.X, FMath::Max(BagSectionsWidth, BagBarWidth) + InventoryOuterPaddingX),
+		FMath::Max(InventorySize.Y, BagGridHeight + InventoryHeaderAndCurrencyHeight + InventoryOuterPaddingY));
+}
+
+int32 UWUInventoryWidget::GetVisibleBagSectionCount() const
+{
+	return FMath::Max(1, StartingBagCount);
+}
+
 EVisibility UWUInventoryWidget::GetInventoryVisibility() const
 {
 	return bInventoryOpen ? EVisibility::Visible : EVisibility::Collapsed;
@@ -191,6 +253,49 @@ EVisibility UWUInventoryWidget::GetInventoryVisibility() const
 bool UWUInventoryWidget::IsBagSlotUnlocked(int32 BagSlotIndex) const
 {
 	return BagSlotIndex >= 0 && BagSlotIndex < StartingBagCount;
+}
+
+TSharedRef<SWidget> UWUInventoryWidget::CreateCurrencySection() const
+{
+	return SNew(SBorder)
+		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+		.BorderBackgroundColor(FLinearColor(0.04f, 0.035f, 0.028f, 0.78f))
+		.Padding(FMargin(8.0f, 5.0f))
+		.ToolTipText_Lambda([this]()
+		{
+			return GetCurrencyTooltipText();
+		})
+		[
+			SNew(SHorizontalBox)
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("CarriedCurrencyLabel", "Carried"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 11))
+				.ColorAndOpacity(LabelColor)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+			]
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+			.VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text_Lambda([this]()
+				{
+					return GetCarriedCurrencyText();
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+				.ColorAndOpacity(ValueColor)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+			]
+		];
 }
 
 TSharedRef<SWidget> UWUInventoryWidget::CreateBagSlot(int32 BagSlotIndex) const
@@ -226,6 +331,31 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateBagSlot(int32 BagSlotIndex) const
 		];
 }
 
+FText UWUInventoryWidget::GetCarriedCurrencyText() const
+{
+	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
+	if (!Session || !Session->HasCurrencySnapshot())
+	{
+		return LOCTEXT("CurrencyZero", "0 G  0 S  0 K");
+	}
+
+	return Session->GetCurrencySnapshot().CharacterWallet.Balance.ToDisplayText();
+}
+
+FText UWUInventoryWidget::GetCurrencyTooltipText() const
+{
+	const UWUClientSessionSubsystem* Session = GetSessionSubsystem();
+	if (!Session || !Session->HasCurrencySnapshot())
+	{
+		return LOCTEXT("CurrencyZeroTooltip", "Carried: 0 Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon");
+	}
+
+	const FWUBackendCurrencySnapshot& Snapshot = Session->GetCurrencySnapshot();
+	return FText::Format(
+		LOCTEXT("CurrencyTooltip", "Carried: {0} Knuts\n29 Knuts = 1 Sickle\n17 Sickles = 1 Galleon"),
+		FText::AsNumber(Snapshot.CharacterWallet.Balance.BalanceKnuts));
+}
+
 TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex)
 {
 	TSharedRef<SGridPanel> SlotGrid = SNew(SGridPanel);
@@ -239,7 +369,7 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateBagSection(int32 BagIndex)
 			const int32 AbsoluteSlotIndex = (BagIndex * SlotsPerBag) + SlotIndexInBag;
 
 			SlotGrid->AddSlot(Column, Row)
-			.Padding(FMargin(Column > 0 ? 4.0f : 0.0f, Row > 0 ? 4.0f : 0.0f, 0.0f, 0.0f))
+			.Padding(FMargin(Column > 0 ? InventorySlotSpacing : 0.0f, Row > 0 ? InventorySlotSpacing : 0.0f, 0.0f, 0.0f))
 			[
 				CreateInventorySlot(AbsoluteSlotIndex)
 			];
@@ -303,6 +433,22 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateInventorySlot(int32 AbsoluteSlotIn
 				]
 
 				+ SOverlay::Slot()
+				.Padding(FMargin(4.0f))
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				[
+					SNew(SImage)
+					.Image_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotIconBrush(AbsoluteSlotIndex);
+					})
+					.Visibility_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotIconVisibility(AbsoluteSlotIndex);
+					})
+				]
+
+				+ SOverlay::Slot()
 				.HAlign(HAlign_Center)
 				.VAlign(VAlign_Center)
 				[
@@ -315,6 +461,10 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateInventorySlot(int32 AbsoluteSlotIn
 					.ColorAndOpacity_Lambda([this, AbsoluteSlotIndex]()
 					{
 						return GetInventorySlotTextColor(AbsoluteSlotIndex);
+					})
+					.Visibility_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotTextVisibility(AbsoluteSlotIndex);
 					})
 					.ShadowOffset(FVector2D(1.0f, 1.0f))
 					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f))
@@ -344,10 +494,18 @@ FText UWUInventoryWidget::GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) c
 		return LOCTEXT("EmptyInventorySlotTooltip", "Empty");
 	}
 
+	if (WUInventory::IsUsableItem(InventorySlot.Item))
+	{
+		return FText::Format(
+			LOCTEXT("UsableInventorySlotTooltip", "{0}\n{1}"),
+			FText::FromString(InventorySlot.Item.DisplayName),
+			WUInventory::ItemUseTypeToText(InventorySlot.Item.UseType));
+	}
+
 	return FText::Format(
 		LOCTEXT("InventorySlotTooltip", "{0}\n{1}"),
 		FText::FromString(InventorySlot.Item.DisplayName),
-		WUInventory::EquipmentSlotToText(InventorySlot.Item.EquipmentSlot));
+		InventorySlot.Item.bEquippable ? WUInventory::EquipmentSlotToText(InventorySlot.Item.EquipmentSlot) : LOCTEXT("InventoryItemNotEquippable", "Not equippable"));
 }
 
 FSlateColor UWUInventoryWidget::GetInventorySlotTextColor(int32 AbsoluteSlotIndex) const
@@ -376,18 +534,110 @@ FLinearColor UWUInventoryWidget::GetInventorySlotTint(int32 AbsoluteSlotIndex) c
 	return Tint;
 }
 
+const FSlateBrush* UWUInventoryWidget::GetInventorySlotIconBrush(int32 AbsoluteSlotIndex)
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (!Character || !Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) || !InventorySlot.bHasItem)
+	{
+		return nullptr;
+	}
+
+	const FString& IconTexturePath = InventorySlot.Item.IconTexturePath;
+	if (IconTexturePath.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	if (const FSlateBrush* CachedBrush = IconBrushCache.Find(IconTexturePath))
+	{
+		return CachedBrush;
+	}
+
+	UTexture2D* IconTexture = nullptr;
+	if (TObjectPtr<UTexture2D>* CachedTexture = IconTextureCache.Find(IconTexturePath))
+	{
+		IconTexture = CachedTexture->Get();
+	}
+
+	if (!IconTexture)
+	{
+		IconTexture = LoadObject<UTexture2D>(nullptr, *IconTexturePath);
+		if (!IconTexture)
+		{
+			return nullptr;
+		}
+
+		IconTextureCache.Add(IconTexturePath, IconTexture);
+	}
+
+	FSlateBrush Brush;
+	Brush.SetResourceObject(IconTexture);
+	Brush.ImageSize = FVector2D(
+		FMath::Max(1.0f, InventorySlotSize.X - 8.0f),
+		FMath::Max(1.0f, InventorySlotSize.Y - 8.0f));
+	Brush.DrawAs = ESlateBrushDrawType::Image;
+
+	return &IconBrushCache.Add(IconTexturePath, Brush);
+}
+
+EVisibility UWUInventoryWidget::GetInventorySlotIconVisibility(int32 AbsoluteSlotIndex)
+{
+	return GetInventorySlotIconBrush(AbsoluteSlotIndex) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+}
+
+EVisibility UWUInventoryWidget::GetInventorySlotTextVisibility(int32 AbsoluteSlotIndex)
+{
+	return GetInventorySlotIconBrush(AbsoluteSlotIndex) ? EVisibility::Collapsed : EVisibility::HitTestInvisible;
+}
+
 FReply UWUInventoryWidget::HandleInventorySlotClicked(int32 AbsoluteSlotIndex)
 {
 	AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
 	FWUInventorySlot InventorySlot;
 	if (Character && Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) && InventorySlot.bHasItem)
 	{
+		if (WUInventory::IsUsableItem(InventorySlot.Item))
+		{
+			OnItemUseRequested.Broadcast(AbsoluteSlotIndex, InventorySlot.Item);
+			return FReply::Handled();
+		}
+
+		if (!InventorySlot.Item.bEquippable)
+		{
+			return FReply::Handled();
+		}
+
 		Character->EquipInventorySlot(AbsoluteSlotIndex);
 		InvalidateLayoutAndVolatility();
 		return FReply::Handled();
 	}
 
 	return FReply::Unhandled();
+}
+
+void UWUInventoryWidget::RequestCurrencySnapshot() const
+{
+	if (UWUClientSessionSubsystem* Session = GetSessionSubsystem())
+	{
+		Session->RefreshSelectedCurrencySnapshot();
+	}
+}
+
+UWUClientSessionSubsystem* UWUInventoryWidget::GetSessionSubsystem() const
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		return GameInstance->GetSubsystem<UWUClientSessionSubsystem>();
+	}
+
+	return nullptr;
+}
+
+void UWUInventoryWidget::HandleCurrencySnapshotLoaded(const FWUBackendCurrencySnapshot& Snapshot)
+{
+	(void)Snapshot;
+	InvalidateLayoutAndVolatility();
 }
 
 void UWUInventoryWidget::ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin)
