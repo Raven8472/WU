@@ -233,6 +233,7 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
+					|| SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
 			{
 				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
