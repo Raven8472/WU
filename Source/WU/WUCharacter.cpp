@@ -1562,9 +1562,9 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		{
 			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
 			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
-					|| SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
 			{
 				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
@@ -1582,11 +1582,34 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		{
 			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
 			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
-					|| SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)))
 			{
 				GetMesh()->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
+			}
+		}
+	}
+
+	if (UMaterialInterface* FacialsMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::FacialsMaterial(CharacterAppearance.Sex, CharacterAppearance.HairColorIndex)))
+	{
+		const TArray<FName> HeadMaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < HeadMaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = HeadMaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase))
+			{
+				HeadMeshComponent->SetMaterial(MaterialIndex, FacialsMaterial);
+			}
+		}
+
+		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < BodyMaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase))
+			{
+				GetMesh()->SetMaterial(MaterialIndex, FacialsMaterial);
 			}
 		}
 	}

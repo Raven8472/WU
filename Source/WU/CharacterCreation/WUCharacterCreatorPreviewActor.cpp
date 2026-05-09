@@ -231,9 +231,9 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 		{
 			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
 			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
-					|| SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
 			{
 				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
@@ -244,6 +244,19 @@ void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreat
 		if (!bAppliedHeadMaterial && HeadMeshComponent->GetNumMaterials() > 0)
 		{
 			HeadMeshComponent->SetMaterial(0, ResolvedHeadMaterial);
+		}
+	}
+
+	if (UMaterialInterface* FacialsMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::FacialsMaterial(Request.Sex, Request.HairColorIndex)))
+	{
+		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase))
+			{
+				HeadMeshComponent->SetMaterial(MaterialIndex, FacialsMaterial);
+			}
 		}
 	}
 

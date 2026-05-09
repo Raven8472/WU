@@ -218,6 +218,32 @@ const TCHAR* FWUCharacterAssetPaths::HairMaterial(int32 HairColorIndex)
 	return HairMaterialPaths[NormalizeIndex(HairColorIndex, UE_ARRAY_COUNT(HairMaterialPaths))];
 }
 
+const TCHAR* FWUCharacterAssetPaths::FacialsMaterial(EWUCharacterSex Sex, int32 HairColorIndex)
+{
+	static const TCHAR* FemaleFacialsMaterialPaths[] =
+	{
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Female/Facials/MI_Hu_F_Facials_Bk.MI_Hu_F_Facials_Bk"),
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Female/Facials/MI_Hu_F_Facials_Bd.MI_Hu_F_Facials_Bd"),
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Female/Facials/MI_Hu_F_Facials_Br.MI_Hu_F_Facials_Br"),
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Female/Facials/MI_Hu_F_Facials_Gr.MI_Hu_F_Facials_Gr")
+	};
+
+	static const TCHAR* MaleFacialsMaterialPaths[] =
+	{
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Male/Facials/MI_Hu_M_Facials_Bk.MI_Hu_M_Facials_Bk"),
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Male/Facials/MI_Hu_M_Facials_Bd.MI_Hu_M_Facials_Bd"),
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Male/Facials/MI_Hu_M_Facials_Br.MI_Hu_M_Facials_Br"),
+		WU_STYLIZED_CHARACTER_PATH("/Materials/Instances/Character/Human/Male/Facials/MI_Hu_M_Facials_Gr.MI_Hu_M_Facials_Gr")
+	};
+
+	if (Sex == EWUCharacterSex::Female)
+	{
+		return FemaleFacialsMaterialPaths[NormalizeIndex(HairColorIndex, UE_ARRAY_COUNT(FemaleFacialsMaterialPaths))];
+	}
+
+	return MaleFacialsMaterialPaths[NormalizeIndex(HairColorIndex, UE_ARRAY_COUNT(MaleFacialsMaterialPaths))];
+}
+
 const TCHAR* FWUCharacterAssetPaths::UnderhairTexture(EWUCharacterSex Sex, int32 HairColorIndex)
 {
 	static const TCHAR* FemaleUnderhairTexturePaths[] =
