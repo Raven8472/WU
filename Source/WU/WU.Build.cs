@@ -35,7 +35,8 @@ public class WU : ModuleRules
 			"WU/Variant_Combat/Animation",
 			"WU/Variant_Combat/Gameplay",
 			"WU/Variant_Combat/Interfaces",
-			"WU/Variant_Combat/UI"
+			"WU/Variant_Combat/UI",
+			"WU/NPC"
 		});
 
 		// Uncomment if you are using Slate UI
