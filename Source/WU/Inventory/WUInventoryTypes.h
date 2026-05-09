@@ -103,6 +103,9 @@ struct FWUInventoryItem
 	FName IconId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")
+	FString IconTexturePath;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")
 	EWUItemVisualLayer VisualLayer = EWUItemVisualLayer::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WU|Inventory|Visuals")

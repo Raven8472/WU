@@ -17,7 +17,8 @@ namespace WUInventory
 			bool bCoversTorso = false,
 			bool bCoversLegs = false,
 			bool bEquippable = true,
-			EWUItemUseType UseType = EWUItemUseType::None)
+			EWUItemUseType UseType = EWUItemUseType::None,
+			const TCHAR* IconTexturePath = TEXT(""))
 		{
 			FWUInventoryItem Item;
 			Item.ItemId = ItemId;
@@ -27,6 +28,7 @@ namespace WUInventory
 			Item.UseType = UseType;
 			Item.ItemTint = ItemTint;
 			Item.IconId = ItemId;
+			Item.IconTexturePath = IconTexturePath;
 			Item.VisualLayer = VisualLayer;
 			Item.bCoversTorso = bCoversTorso;
 			Item.bCoversLegs = bCoversLegs;
@@ -113,7 +115,8 @@ namespace WUInventory
 					false,
 					false,
 					false,
-					EWUItemUseType::ClubCharter)
+					EWUItemUseType::ClubCharter,
+					TEXT("/Game/UI/Icons/Items/T_Item_ClubCharter.T_Item_ClubCharter"))
 			};
 
 			return Definitions;

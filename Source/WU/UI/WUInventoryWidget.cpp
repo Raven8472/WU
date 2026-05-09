@@ -400,6 +400,22 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateInventorySlot(int32 AbsoluteSlotIn
 				]
 
 				+ SOverlay::Slot()
+				.Padding(FMargin(5.0f))
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				[
+					SNew(SImage)
+					.Image_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotIconBrush(AbsoluteSlotIndex);
+					})
+					.Visibility_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotIconVisibility(AbsoluteSlotIndex);
+					})
+				]
+
+				+ SOverlay::Slot()
 				.HAlign(HAlign_Center)
 				.VAlign(VAlign_Center)
 				[
@@ -412,6 +428,10 @@ TSharedRef<SWidget> UWUInventoryWidget::CreateInventorySlot(int32 AbsoluteSlotIn
 					.ColorAndOpacity_Lambda([this, AbsoluteSlotIndex]()
 					{
 						return GetInventorySlotTextColor(AbsoluteSlotIndex);
+					})
+					.Visibility_Lambda([this, AbsoluteSlotIndex]()
+					{
+						return GetInventorySlotTextVisibility(AbsoluteSlotIndex);
 					})
 					.ShadowOffset(FVector2D(1.0f, 1.0f))
 					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f))
@@ -479,6 +499,63 @@ FLinearColor UWUInventoryWidget::GetInventorySlotTint(int32 AbsoluteSlotIndex) c
 	FLinearColor Tint = InventorySlot.Item.ItemTint;
 	Tint.A = 0.92f;
 	return Tint;
+}
+
+const FSlateBrush* UWUInventoryWidget::GetInventorySlotIconBrush(int32 AbsoluteSlotIndex)
+{
+	const AWUCharacter* Character = Cast<AWUCharacter>(GetOwningPlayerPawn());
+	FWUInventorySlot InventorySlot;
+	if (!Character || !Character->GetInventorySlot(AbsoluteSlotIndex, InventorySlot) || !InventorySlot.bHasItem)
+	{
+		return nullptr;
+	}
+
+	const FString& IconTexturePath = InventorySlot.Item.IconTexturePath;
+	if (IconTexturePath.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	if (const FSlateBrush* CachedBrush = IconBrushCache.Find(IconTexturePath))
+	{
+		return CachedBrush;
+	}
+
+	UTexture2D* IconTexture = nullptr;
+	if (TObjectPtr<UTexture2D>* CachedTexture = IconTextureCache.Find(IconTexturePath))
+	{
+		IconTexture = CachedTexture->Get();
+	}
+
+	if (!IconTexture)
+	{
+		IconTexture = LoadObject<UTexture2D>(nullptr, *IconTexturePath);
+		if (!IconTexture)
+		{
+			return nullptr;
+		}
+
+		IconTextureCache.Add(IconTexturePath, IconTexture);
+	}
+
+	FSlateBrush Brush;
+	Brush.SetResourceObject(IconTexture);
+	Brush.ImageSize = FVector2D(
+		FMath::Max(1.0f, InventorySlotSize.X - 10.0f),
+		FMath::Max(1.0f, InventorySlotSize.Y - 10.0f));
+	Brush.DrawAs = ESlateBrushDrawType::Image;
+
+	return &IconBrushCache.Add(IconTexturePath, Brush);
+}
+
+EVisibility UWUInventoryWidget::GetInventorySlotIconVisibility(int32 AbsoluteSlotIndex)
+{
+	return GetInventorySlotIconBrush(AbsoluteSlotIndex) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+}
+
+EVisibility UWUInventoryWidget::GetInventorySlotTextVisibility(int32 AbsoluteSlotIndex)
+{
+	return GetInventorySlotIconBrush(AbsoluteSlotIndex) ? EVisibility::Collapsed : EVisibility::HitTestInvisible;
 }
 
 FReply UWUInventoryWidget::HandleInventorySlotClicked(int32 AbsoluteSlotIndex)

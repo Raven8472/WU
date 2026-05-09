@@ -100,6 +100,9 @@ private:
 	FText GetInventorySlotTooltipText(int32 AbsoluteSlotIndex) const;
 	FSlateColor GetInventorySlotTextColor(int32 AbsoluteSlotIndex) const;
 	FLinearColor GetInventorySlotTint(int32 AbsoluteSlotIndex) const;
+	const FSlateBrush* GetInventorySlotIconBrush(int32 AbsoluteSlotIndex);
+	EVisibility GetInventorySlotIconVisibility(int32 AbsoluteSlotIndex);
+	EVisibility GetInventorySlotTextVisibility(int32 AbsoluteSlotIndex);
 	FReply HandleInventorySlotClicked(int32 AbsoluteSlotIndex);
 
 	void ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin = FMargin(0.0f));
@@ -116,4 +119,7 @@ private:
 	FSlateBrush PanelBrush;
 	FSlateBrush SlotBrush;
 	FSlateBrush DisabledSlotBrush;
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UTexture2D>> IconTextureCache;
+	TMap<FString, FSlateBrush> IconBrushCache;
 };
