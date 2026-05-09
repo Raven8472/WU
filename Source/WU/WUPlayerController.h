@@ -21,7 +21,9 @@ class UWUExperienceBarWidget;
 class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
 class UWUTargetFrameWidget;
+class UWUVendorWidget;
 class UWUZoneNameWidget;
+class AWUNpcCharacter;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUTargetChangedSignature, AWUCharacter*, NewTarget);
 
@@ -160,6 +162,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
 	FVector2D InventoryViewportSize = FVector2D(520.0f, 372.0f);
 
+	/** Native vendor shell widget to spawn for NPC shops */
+	UPROPERTY(EditAnywhere, Category = "UI|Vendor")
+	TSubclassOf<UWUVendorWidget> VendorWidgetClass;
+
+	/** Pointer to the native vendor shell widget */
+	UPROPERTY()
+	TObjectPtr<UWUVendorWidget> VendorWidget;
+
+	/** Viewport position for the vendor shell widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Vendor")
+	FVector2D VendorViewportPosition = FVector2D(24.0f, 150.0f);
+
+	/** Viewport size for the vendor shell widget */
+	UPROPERTY(EditAnywhere, Category = "UI|Vendor")
+	FVector2D VendorViewportSize = FVector2D(380.0f, 260.0f);
+
 	/** Native character panel widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Character")
 	TSubclassOf<UWUCharacterPanelWidget> CharacterPanelWidgetClass;
@@ -240,6 +258,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input|Targeting", meta = (ClampMin = 0, Units = "cm"))
 	float ClickTargetRayTolerance = 140.0f;
 
+	/** Maximum distance for direct NPC interaction. */
+	UPROPERTY(EditAnywhere, Category = "Input|NPC", meta = (ClampMin = 100, Units = "cm"))
+	float NpcInteractionDistance = 450.0f;
+
 	/** Shows short on-screen messages for target input and selection while tuning the prototype. */
 	UPROPERTY(EditAnywhere, Category = "Input|Targeting")
 	bool bShowTargetingDebugMessages = true;
@@ -284,6 +306,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Targeting")
 	void TargetUnderCursor();
 
+	/** Handles primary world click, preferring NPC interaction before combat targeting. */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void HandlePrimaryWorldClick();
+
+	/** Interacts with the NPC under the cursor or the nearest interactable NPC. */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void InteractWithNpc();
+
 	/** Cycles to the next valid target in front of the camera. */
 	UFUNCTION(BlueprintCallable, Category = "Targeting")
 	void TargetNextCharacter();
@@ -323,6 +353,14 @@ public:
 	/** Hides the inventory shell window. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void HideInventory();
+
+	/** Shows a vendor window for the requested NPC. */
+	UFUNCTION(BlueprintCallable, Category = "Vendor")
+	void ShowVendorForNpc(AWUNpcCharacter* NpcCharacter);
+
+	/** Hides the vendor window. */
+	UFUNCTION(BlueprintCallable, Category = "Vendor")
+	void HideVendor();
 
 	/** Toggles the character panel window. */
 	UFUNCTION(BlueprintCallable, Category = "Character")
@@ -411,11 +449,23 @@ protected:
 	/** Returns true while the inventory shell window is open. */
 	bool IsInventoryOpen() const;
 
+	/** Returns true while the vendor shell window is open. */
+	bool IsVendorOpen() const;
+
 	/** Returns true while the character panel window is open. */
 	bool IsCharacterPanelOpen() const;
 
 	/** Returns true while the character creator shell window is open. */
 	bool IsCharacterCreatorOpen() const;
+
+	/** Finds an interactable NPC under the cursor. */
+	AWUNpcCharacter* FindNpcUnderCursor() const;
+
+	/** Finds the nearest interactable NPC close enough to the controlled pawn. */
+	AWUNpcCharacter* FindNearestInteractableNpc() const;
+
+	/** Returns true when the NPC is close enough for interaction. */
+	bool IsNpcInInteractionRange(const AWUNpcCharacter* NpcCharacter) const;
 
 	/** Ensures a local-only preview actor exists for the character creator. */
 	AWUCharacterCreatorPreviewActor* EnsureCharacterCreatorPreviewActor();
