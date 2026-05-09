@@ -16,6 +16,7 @@
 #include "Components/Widget.h"
 #include "InputCoreTypes.h"
 #include "CharacterCreation/WUCharacterCreatorPreviewActor.h"
+#include "NPC/WUNpcCharacter.h"
 #include "WUCharacter.h"
 #include "UI/WUCharacterCreatorWidget.h"
 #include "UI/WUCharacterPanelWidget.h"
@@ -24,6 +25,7 @@
 #include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
 #include "UI/WUTargetFrameWidget.h"
+#include "UI/WUVendorWidget.h"
 #include "UI/WUZoneNameWidget.h"
 #include "WU.h"
 #include "GameFramework/PlayerState.h"
@@ -56,6 +58,7 @@ AWUPlayerController::AWUPlayerController()
 	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
+	VendorWidgetClass = UWUVendorWidget::StaticClass();
 	ZoneNameWidgetClass = UWUZoneNameWidget::StaticClass();
 }
 
@@ -165,7 +168,23 @@ void AWUPlayerController::BeginPlay()
 		if (InventoryWidget)
 		{
 			InventoryWidget->AddToPlayerScreen(8);
-			ApplyViewportUnitFrameSlot(InventoryWidget, InventoryViewportSize, InventoryViewportPosition, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f));
+			ApplyViewportUnitFrameSlot(InventoryWidget, InventoryWidget->GetDesiredInventoryPanelSize(), InventoryViewportPosition, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f));
+		}
+	}
+
+	if (!VendorWidgetClass)
+	{
+		VendorWidgetClass = UWUVendorWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && VendorWidgetClass)
+	{
+		VendorWidget = CreateWidget<UWUVendorWidget>(this, VendorWidgetClass);
+
+		if (VendorWidget)
+		{
+			VendorWidget->AddToPlayerScreen(9);
+			ApplyViewportUnitFrameSlot(VendorWidget, VendorViewportSize, VendorViewportPosition, FAnchors(0.0f, 0.5f), FVector2D(0.0f, 0.5f));
 		}
 	}
 
@@ -244,6 +263,14 @@ void AWUPlayerController::BeginPlay()
 
 	if (IsLocalPlayerController())
 	{
+		if (UGameInstance* GameInstance = GetGameInstance())
+		{
+			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+			{
+				Session->OnInventorySnapshotLoaded.AddDynamic(this, &AWUPlayerController::HandleInventorySnapshotLoaded);
+			}
+		}
+
 		ApplySelectedCharacterSessionContext();
 		ApplyGameplayInputMode();
 		ShowTargetingDebugMessage(TEXT("WU targeting ready"));
@@ -265,6 +292,14 @@ void AWUPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (IsLocalPlayerController())
 	{
 		SaveSelectedCharacterLocation();
+
+		if (UGameInstance* GameInstance = GetGameInstance())
+		{
+			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+			{
+				Session->OnInventorySnapshotLoaded.RemoveDynamic(this, &AWUPlayerController::HandleInventorySnapshotLoaded);
+			}
+		}
 
 		if (GetWorld())
 		{
@@ -315,10 +350,20 @@ void AWUPlayerController::SetupInputComponent()
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
 	{
+		if (ClickTargetAction)
+		{
+			EnhancedInputComponent->BindAction(ClickTargetAction, ETriggerEvent::Started, this, &AWUPlayerController::HandlePrimaryWorldClick);
+		}
+
 		if (TabTargetAction)
 		{
 			EnhancedInputComponent->BindAction(TabTargetAction, ETriggerEvent::Started, this, &AWUPlayerController::TargetNextCharacter);
 		}
+	}
+
+	if (!ClickTargetAction)
+	{
+		InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUPlayerController::HandlePrimaryWorldClick);
 	}
 
 	if (!TabTargetAction)
@@ -331,6 +376,7 @@ void AWUPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
 	InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &AWUPlayerController::ToggleCharacterPanel);
+	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AWUPlayerController::InteractWithNpc);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &AWUPlayerController::ToggleCharacterCreator);
 }
 
@@ -488,6 +534,44 @@ void AWUPlayerController::TargetUnderCursor()
 	}
 }
 
+void AWUPlayerController::HandlePrimaryWorldClick()
+{
+	if (!IsLocalPlayerController() || HasInteractiveOverlayOpen())
+	{
+		return;
+	}
+
+	if (AWUNpcCharacter* NpcCharacter = FindNpcUnderCursor())
+	{
+		ShowVendorForNpc(NpcCharacter);
+		return;
+	}
+
+	TargetUnderCursor();
+}
+
+void AWUPlayerController::InteractWithNpc()
+{
+	if (!IsLocalPlayerController() || HasInteractiveOverlayOpen())
+	{
+		return;
+	}
+
+	AWUNpcCharacter* NpcCharacter = FindNpcUnderCursor();
+	if (!NpcCharacter)
+	{
+		NpcCharacter = FindNearestInteractableNpc();
+	}
+
+	if (!NpcCharacter)
+	{
+		ShowTargetingDebugMessage(TEXT("No NPC in range"), FColor::Yellow);
+		return;
+	}
+
+	ShowVendorForNpc(NpcCharacter);
+}
+
 void AWUPlayerController::TargetNextCharacter()
 {
 	if (!GetWorld() || IsChatInputOpen())
@@ -619,6 +703,12 @@ void AWUPlayerController::CloseChatInput()
 		return;
 	}
 
+	if (IsVendorOpen())
+	{
+		HideVendor();
+		return;
+	}
+
 	if (HasCurrentTarget())
 	{
 		ClearCurrentTarget();
@@ -653,6 +743,11 @@ void AWUPlayerController::ToggleInventory()
 		CharacterPanelWidget->HidePanel();
 	}
 
+	if (IsVendorOpen())
+	{
+		VendorWidget->HideVendor();
+	}
+
 	InventoryWidget->ToggleInventory();
 
 	if (InventoryWidget->IsInventoryOpen())
@@ -684,6 +779,11 @@ void AWUPlayerController::ShowInventory()
 		CharacterPanelWidget->HidePanel();
 	}
 
+	if (IsVendorOpen())
+	{
+		VendorWidget->HideVendor();
+	}
+
 	if (!InventoryWidget->IsInventoryOpen())
 	{
 		InventoryWidget->ShowInventory();
@@ -710,6 +810,67 @@ void AWUPlayerController::HideInventory()
 	ApplyGameplayInputMode();
 }
 
+void AWUPlayerController::ShowVendorForNpc(AWUNpcCharacter* NpcCharacter)
+{
+	if (!IsLocalPlayerController() || !VendorWidget || !NpcCharacter || !IsNpcInInteractionRange(NpcCharacter))
+	{
+		return;
+	}
+
+	if (!NpcCharacter->CanOpenVendor())
+	{
+		if (NpcCharacter->CanOfferQuest())
+		{
+			ShowTargetingDebugMessage(TEXT("Quest interaction not wired yet"), FColor::Yellow);
+		}
+		else
+		{
+			ShowTargetingDebugMessage(NpcCharacter->GetInteractionPrompt().ToString(), FColor::Yellow);
+		}
+		return;
+	}
+
+	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
+	{
+		InventoryWidget->HideInventory();
+	}
+
+	if (CharacterPanelWidget && CharacterPanelWidget->IsPanelOpen())
+	{
+		CharacterPanelWidget->HidePanel();
+	}
+
+	if (CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen())
+	{
+		HideCharacterCreator();
+	}
+
+	const FWUNpcProfile Profile = NpcCharacter->GetNpcProfile();
+	VendorWidget->ShowVendor(Profile.VendorTableId, NpcCharacter->GetNpcDisplayName(), NpcCharacter->GetInteractionPrompt());
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+
+	ShowTargetingDebugMessage(FString::Printf(TEXT("Vendor: %s"), *NpcCharacter->GetNpcDisplayName().ToString()), FColor::Green);
+}
+
+void AWUPlayerController::HideVendor()
+{
+	if (!IsLocalPlayerController() || !VendorWidget)
+	{
+		return;
+	}
+
+	VendorWidget->HideVendor();
+	ApplyGameplayInputMode();
+}
+
 void AWUPlayerController::ToggleCharacterPanel()
 {
 	if (!IsLocalPlayerController() || !CharacterPanelWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
@@ -720,6 +881,11 @@ void AWUPlayerController::ToggleCharacterPanel()
 	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
 	{
 		InventoryWidget->HideInventory();
+	}
+
+	if (VendorWidget && VendorWidget->IsVendorOpen())
+	{
+		VendorWidget->HideVendor();
 	}
 
 	CharacterPanelWidget->TogglePanel();
@@ -751,6 +917,11 @@ void AWUPlayerController::ShowCharacterPanel()
 	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
 	{
 		InventoryWidget->HideInventory();
+	}
+
+	if (VendorWidget && VendorWidget->IsVendorOpen())
+	{
+		VendorWidget->HideVendor();
 	}
 
 	if (!CharacterPanelWidget->IsPanelOpen())
@@ -816,6 +987,11 @@ void AWUPlayerController::ShowCharacterCreator()
 	if (CharacterPanelWidget && CharacterPanelWidget->IsPanelOpen())
 	{
 		CharacterPanelWidget->HidePanel();
+	}
+
+	if (VendorWidget && VendorWidget->IsVendorOpen())
+	{
+		VendorWidget->HideVendor();
 	}
 
 	SetIgnoreMoveInput(true);
@@ -938,6 +1114,11 @@ bool AWUPlayerController::IsChatInputOpen() const
 bool AWUPlayerController::IsInventoryOpen() const
 {
 	return InventoryWidget && InventoryWidget->IsInventoryOpen();
+}
+
+bool AWUPlayerController::IsVendorOpen() const
+{
+	return VendorWidget && VendorWidget->IsVendorOpen();
 }
 
 bool AWUPlayerController::IsCharacterPanelOpen() const
@@ -1063,8 +1244,8 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 		return;
 	}
 
-	const UGameInstance* GameInstance = GetGameInstance();
-	const UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	UGameInstance* GameInstance = GetGameInstance();
+	UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
 	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
 	{
 		return;
@@ -1099,11 +1280,16 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 
 		if (AppliedSessionSpawnCharacterId != SelectedCharacterId && !SelectedCharacter->Location.IsNearlyZero())
 		{
-			WUCharacter->SetActorLocation(
-				SelectedCharacter->Location.ToVector(),
-				false,
-				nullptr,
-				ETeleportType::TeleportPhysics);
+			const FVector SavedLocation = SelectedCharacter->Location.ToVector();
+			if (HasAuthority())
+			{
+				WUCharacter->SetActorLocation(SavedLocation, false, nullptr, ETeleportType::TeleportPhysics);
+				WUCharacter->ForceNetUpdate();
+			}
+			else
+			{
+				Server_ApplySelectedCharacterSpawnLocation(SavedLocation);
+			}
 			AppliedSessionSpawnCharacterId = SelectedCharacterId;
 		}
 	}
@@ -1112,6 +1298,18 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 	{
 		AppliedSessionCharacterId = SelectedCharacterId;
 		ShowTargetingDebugMessage(FString::Printf(TEXT("Entered as %s"), *SelectedCharacter->Name), FColor::Green);
+	}
+
+	if (AppliedInventoryCharacterId != SelectedCharacterId)
+	{
+		if (Session->HasInventorySnapshot() && Session->GetInventorySnapshot().CharacterId == SelectedCharacterId)
+		{
+			ApplyInventorySnapshotToCurrentPawn(Session->GetInventorySnapshot());
+		}
+		else
+		{
+			Session->RefreshSelectedInventorySnapshot();
+		}
 	}
 }
 
@@ -1133,6 +1331,46 @@ void AWUPlayerController::SaveSelectedCharacterLocation()
 	Session->SaveSelectedCharacterLocation(ControlledPawn->GetActorLocation());
 }
 
+void AWUPlayerController::HandleInventorySnapshotLoaded(const FWUBackendInventorySnapshot& Snapshot)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	const UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Snapshot.CharacterId != Session->GetSelectedCharacterId())
+	{
+		return;
+	}
+
+	ApplyInventorySnapshotToCurrentPawn(Snapshot);
+}
+
+bool AWUPlayerController::ApplyInventorySnapshotToCurrentPawn(const FWUBackendInventorySnapshot& Snapshot)
+{
+	AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn());
+	if (!WUCharacter)
+	{
+		return false;
+	}
+
+	TArray<FName> ItemIds;
+	for (const FWUBackendInventoryItem& Item : Snapshot.Items)
+	{
+		const int32 Quantity = FMath::Max(1, Item.Quantity);
+		for (int32 Count = 0; Count < Quantity; ++Count)
+		{
+			ItemIds.Add(FName(*Item.ItemId));
+		}
+	}
+
+	WUCharacter->ApplyPersistentInventoryItemIds(ItemIds);
+	AppliedInventoryCharacterId = Snapshot.CharacterId;
+	return true;
+}
+
 void AWUPlayerController::Server_RequestSelectedCharacterExperience_Implementation(int32 Amount, EWUExperienceSource Source)
 {
 	if (Amount <= 0)
@@ -1144,6 +1382,23 @@ void AWUPlayerController::Server_RequestSelectedCharacterExperience_Implementati
 	{
 		WUCharacter->AwardExperience(Amount, Source);
 	}
+}
+
+void AWUPlayerController::Server_ApplySelectedCharacterSpawnLocation_Implementation(FVector SavedLocation)
+{
+	if (SavedLocation.IsNearlyZero())
+	{
+		return;
+	}
+
+	APawn* ControlledPawn = GetPawn();
+	if (!ControlledPawn)
+	{
+		return;
+	}
+
+	ControlledPawn->SetActorLocation(SavedLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	ControlledPawn->ForceNetUpdate();
 }
 
 void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message)
@@ -1232,8 +1487,126 @@ bool AWUPlayerController::HasInteractiveOverlayOpen() const
 {
 	return IsChatInputOpen()
 		|| IsInventoryOpen()
+		|| IsVendorOpen()
 		|| IsCharacterPanelOpen()
 		|| IsCharacterCreatorOpen();
+}
+
+AWUNpcCharacter* AWUPlayerController::FindNpcUnderCursor() const
+{
+	if (!IsLocalPlayerController() || !GetWorld())
+	{
+		return nullptr;
+	}
+
+	FVector WorldLocation;
+	FVector WorldDirection;
+	if (!DeprojectMousePositionToWorld(WorldLocation, WorldDirection))
+	{
+		return nullptr;
+	}
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WUNpcUnderCursor), true);
+	QueryParams.AddIgnoredActor(GetPawn());
+
+	const FVector TraceEnd = WorldLocation + (WorldDirection * TargetTraceDistance);
+	auto FindNpcInHits = [this](const TArray<FHitResult>& Hits) -> AWUNpcCharacter*
+	{
+		for (const FHitResult& Hit : Hits)
+		{
+			if (AWUNpcCharacter* NpcCharacter = Cast<AWUNpcCharacter>(Hit.GetActor()))
+			{
+				if (IsNpcInInteractionRange(NpcCharacter))
+				{
+					return NpcCharacter;
+				}
+			}
+		}
+
+		return nullptr;
+	};
+
+	TArray<FHitResult> VisibilityHits;
+	GetWorld()->LineTraceMultiByChannel(
+		VisibilityHits,
+		WorldLocation,
+		TraceEnd,
+		ECC_Visibility,
+		QueryParams);
+
+	if (AWUNpcCharacter* NpcCharacter = FindNpcInHits(VisibilityHits))
+	{
+		return NpcCharacter;
+	}
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	TArray<FHitResult> PawnHits;
+	GetWorld()->LineTraceMultiByObjectType(
+		PawnHits,
+		WorldLocation,
+		TraceEnd,
+		ObjectParams,
+		QueryParams);
+
+	return FindNpcInHits(PawnHits);
+}
+
+AWUNpcCharacter* AWUPlayerController::FindNearestInteractableNpc() const
+{
+	if (!GetWorld() || !GetPawn())
+	{
+		return nullptr;
+	}
+
+	const APawn* ControlledPawn = GetPawn();
+	const FVector PawnLocation = ControlledPawn->GetActorLocation();
+	const FVector PawnForward = ControlledPawn->GetActorForwardVector();
+	const float MaxDistanceSquared = FMath::Square(NpcInteractionDistance);
+
+	AWUNpcCharacter* BestNpc = nullptr;
+	float BestDistanceSquared = TNumericLimits<float>::Max();
+
+	for (TActorIterator<AWUNpcCharacter> It(GetWorld()); It; ++It)
+	{
+		AWUNpcCharacter* NpcCharacter = *It;
+		if (!NpcCharacter || NpcCharacter->IsPendingKillPending())
+		{
+			continue;
+		}
+
+		const FVector ToNpc = NpcCharacter->GetActorLocation() - PawnLocation;
+		const float DistanceSquared = ToNpc.SizeSquared();
+		if (DistanceSquared > MaxDistanceSquared)
+		{
+			continue;
+		}
+
+		if (FVector::DotProduct(PawnForward, ToNpc.GetSafeNormal()) < 0.15f)
+		{
+			continue;
+		}
+
+		if (DistanceSquared < BestDistanceSquared)
+		{
+			BestDistanceSquared = DistanceSquared;
+			BestNpc = NpcCharacter;
+		}
+	}
+
+	return BestNpc;
+}
+
+bool AWUPlayerController::IsNpcInInteractionRange(const AWUNpcCharacter* NpcCharacter) const
+{
+	const APawn* ControlledPawn = GetPawn();
+	if (!NpcCharacter || !ControlledPawn)
+	{
+		return false;
+	}
+
+	return FVector::DistSquared(ControlledPawn->GetActorLocation(), NpcCharacter->GetActorLocation()) <= FMath::Square(NpcInteractionDistance);
 }
 
 bool AWUPlayerController::IsSelectableTarget(const AWUCharacter* Candidate) const

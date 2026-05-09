@@ -3,6 +3,7 @@
 #include "WUCharacter.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/Engine.h"
+#include "Engine/Texture2D.h"
 #include "Animation/AnimationAsset.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
@@ -25,8 +26,10 @@
 #include "Blueprint/UserWidget.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "WUPlayerController.h"
+#include "CharacterCreation/WUCharacterAssetPaths.h"
 
 namespace
 {
@@ -708,6 +711,95 @@ bool AWUCharacter::GetEquippedItem(EWUEquipmentSlot EquipmentSlot, FWUInventoryI
 	return true;
 }
 
+bool AWUCharacter::AddInventoryItemById(FName ItemId)
+{
+	if (!HasAuthority())
+	{
+		ServerAddInventoryItemById(ItemId);
+		return true;
+	}
+
+	if (ItemId.IsNone() || !WUInventory::FindItemDefinition(ItemId))
+	{
+		return false;
+	}
+
+	InitializeInventoryStorage();
+	const bool bAdded = AddItemToInventory(WUInventory::MakeItem(ItemId));
+	if (bAdded)
+	{
+		ForceNetUpdate();
+	}
+
+	return bAdded;
+}
+
+void AWUCharacter::ApplyPersistentInventoryItemIds(const TArray<FName>& ItemIds)
+{
+	if (!HasAuthority())
+	{
+		ServerApplyPersistentInventoryItemIds(ItemIds);
+		return;
+	}
+
+	InitializeInventoryStorage();
+
+	TMap<FName, int32> TargetCounts;
+	for (const FName ItemId : ItemIds)
+	{
+		if (!ItemId.IsNone() && WUInventory::FindItemDefinition(ItemId))
+		{
+			TargetCounts.FindOrAdd(ItemId)++;
+		}
+	}
+
+	TMap<FName, int32> CurrentCounts;
+	for (const FWUInventorySlot& InventorySlot : InventorySlots)
+	{
+		if (InventorySlot.bHasItem && !InventorySlot.Item.ItemId.IsNone())
+		{
+			CurrentCounts.FindOrAdd(InventorySlot.Item.ItemId)++;
+		}
+	}
+
+	bool bChanged = false;
+	for (const TPair<FName, int32>& TargetCount : TargetCounts)
+	{
+		const int32 CurrentCount = CurrentCounts.FindRef(TargetCount.Key);
+		for (int32 MissingCount = CurrentCount; MissingCount < TargetCount.Value; ++MissingCount)
+		{
+			if (AddItemToInventory(WUInventory::MakeItem(TargetCount.Key)))
+			{
+				bChanged = true;
+			}
+		}
+	}
+
+	if (bChanged)
+	{
+		ForceNetUpdate();
+	}
+}
+
+bool AWUCharacter::RemoveInventoryItemAtSlot(int32 SlotIndex)
+{
+	if (!HasAuthority())
+	{
+		ServerRemoveInventoryItemAtSlot(SlotIndex);
+		return true;
+	}
+
+	InitializeInventoryStorage();
+	if (!InventorySlots.IsValidIndex(SlotIndex) || !InventorySlots[SlotIndex].bHasItem)
+	{
+		return false;
+	}
+
+	InventorySlots[SlotIndex] = FWUInventorySlot();
+	ForceNetUpdate();
+	return true;
+}
+
 FWUCharacterAppearance AWUCharacter::GetCharacterAppearance() const
 {
 	return CharacterAppearance;
@@ -1186,7 +1278,7 @@ void AWUCharacter::BeginBackpedal(float Right)
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(PreBackpedalMaxWalkSpeed, BackpedalMaxWalkSpeed);
 
-	const TCHAR* BackpedalAnimationPath = GetBackpedalAnimationPath(CharacterAppearance.Sex, Right);
+	const TCHAR* BackpedalAnimationPath = FWUCharacterAssetPaths::BackpedalAnimation(CharacterAppearance.Sex, Right);
 	if (!BackpedalAnimationPath || CurrentBackpedalAnimationPath == BackpedalAnimationPath)
 	{
 		return;
@@ -1229,7 +1321,7 @@ void AWUCharacter::BeginTurnInPlace(float YawDeltaDegrees)
 		return;
 	}
 
-	const TCHAR* TurnAnimationPath = GetTurnInPlaceAnimationPath(CharacterAppearance.Sex, YawDeltaDegrees);
+	const TCHAR* TurnAnimationPath = FWUCharacterAssetPaths::TurnInPlaceAnimation(CharacterAppearance.Sex, YawDeltaDegrees);
 	if (!TurnAnimationPath)
 	{
 		return;
@@ -1285,7 +1377,7 @@ void AWUCharacter::EndTurnInPlace(bool bForce)
 
 void AWUCharacter::RestoreDefaultLocomotionAnimation()
 {
-	if (UClass* AnimClass = LoadAnimClassForPath(GetAnimationBlueprintPath(CharacterAppearance.Sex)))
+	if (UClass* AnimClass = LoadAnimClassForPath(FWUCharacterAssetPaths::AnimationBlueprint(CharacterAppearance.Sex)))
 	{
 		GetMesh()->SetPlayRate(1.0f);
 		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
@@ -1374,12 +1466,12 @@ void AWUCharacter::ConfigureModularMeshComponent(USkeletalMeshComponent* MeshCom
 
 void AWUCharacter::ApplyCharacterAppearanceMeshes()
 {
-	if (USkeletalMesh* BodyMesh = LoadSkeletalMeshForPath(GetBodyMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* BodyMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BodyMesh(CharacterAppearance.Sex)))
 	{
 		GetMesh()->SetSkeletalMesh(BodyMesh);
 	}
 
-	if (UClass* AnimClass = LoadAnimClassForPath(GetAnimationBlueprintPath(CharacterAppearance.Sex)))
+	if (UClass* AnimClass = LoadAnimClassForPath(FWUCharacterAssetPaths::AnimationBlueprint(CharacterAppearance.Sex)))
 	{
 		GetMesh()->SetAnimInstanceClass(AnimClass);
 	}
@@ -1410,14 +1502,14 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		MeshComponent->SetHiddenInGame(true, false);
 	};
 
-	if (USkeletalMesh* HeadMesh = LoadSkeletalMeshForPath(GetHeadMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* HeadMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::HeadMesh(CharacterAppearance.Sex)))
 	{
 		HeadMeshComponent->SetSkeletalMesh(HeadMesh);
 		HeadMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(HeadMeshComponent);
 	}
 
-	if (USkeletalMesh* HairMesh = LoadSkeletalMeshForPath(GetHairMeshPath(CharacterAppearance.Sex, CharacterAppearance.HairStyleIndex)))
+	if (USkeletalMesh* HairMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::HairMesh(CharacterAppearance.Sex, CharacterAppearance.HairStyleIndex)))
 	{
 		HairMeshComponent->SetSkeletalMesh(HairMesh);
 		HairMeshComponent->SetLeaderPoseComponent(GetMesh());
@@ -1428,7 +1520,7 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		HideModularMesh(HairMeshComponent);
 	}
 
-	if (USkeletalMesh* BrowsMesh = LoadSkeletalMeshForPath(GetBrowsMeshPath(CharacterAppearance.Sex, CharacterAppearance.BrowStyleIndex)))
+	if (USkeletalMesh* BrowsMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BrowsMesh(CharacterAppearance.Sex, CharacterAppearance.BrowStyleIndex)))
 	{
 		BrowsMeshComponent->SetSkeletalMesh(BrowsMesh);
 		BrowsMeshComponent->SetLeaderPoseComponent(GetMesh());
@@ -1439,7 +1531,7 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		HideModularMesh(BrowsMeshComponent);
 	}
 
-	if (USkeletalMesh* BeardMesh = LoadSkeletalMeshForPath(GetBeardMeshPath(CharacterAppearance.Sex, CharacterAppearance.BeardStyleIndex)))
+	if (USkeletalMesh* BeardMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BeardMesh(CharacterAppearance.Sex, CharacterAppearance.BeardStyleIndex)))
 	{
 		BeardMeshComponent->SetSkeletalMesh(BeardMesh);
 		BeardMeshComponent->SetLeaderPoseComponent(GetMesh());
@@ -1450,56 +1542,56 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		HideModularMesh(BeardMeshComponent);
 	}
 
-	if (USkeletalMesh* PantsMesh = LoadSkeletalMeshForPath(GetPantsMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* PantsMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::PantsMesh(CharacterAppearance.Sex)))
 	{
 		PantsMeshComponent->SetSkeletalMesh(PantsMesh);
 		PantsMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(PantsMeshComponent);
 	}
 
-	if (USkeletalMesh* HandsMesh = LoadSkeletalMeshForPath(GetHandsMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* HandsMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::HandsMesh(CharacterAppearance.Sex)))
 	{
 		HandsMeshComponent->SetSkeletalMesh(HandsMesh);
 		HandsMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(HandsMeshComponent);
 	}
 
-	if (USkeletalMesh* BracersMesh = LoadSkeletalMeshForPath(GetBracersMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* BracersMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BracersMesh(CharacterAppearance.Sex)))
 	{
 		BracersMeshComponent->SetSkeletalMesh(BracersMesh);
 		BracersMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(BracersMeshComponent);
 	}
 
-	if (USkeletalMesh* ChestOutfitMesh = LoadSkeletalMeshForPath(GetStarterChestOutfitMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* ChestOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterChestOutfitMesh(CharacterAppearance.Sex)))
 	{
 		ChestOutfitMeshComponent->SetSkeletalMesh(ChestOutfitMesh);
 		ChestOutfitMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(ChestOutfitMeshComponent);
 	}
 
-	if (USkeletalMesh* ChestAddOutfitMesh = LoadSkeletalMeshForPath(GetStarterChestAddOutfitMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* ChestAddOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterChestAddOutfitMesh(CharacterAppearance.Sex)))
 	{
 		ChestAddOutfitMeshComponent->SetSkeletalMesh(ChestAddOutfitMesh);
 		ChestAddOutfitMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(ChestAddOutfitMeshComponent);
 	}
 
-	if (USkeletalMesh* BeltOutfitMesh = LoadSkeletalMeshForPath(GetStarterBeltOutfitMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* BeltOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterBeltOutfitMesh(CharacterAppearance.Sex)))
 	{
 		BeltOutfitMeshComponent->SetSkeletalMesh(BeltOutfitMesh);
 		BeltOutfitMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(BeltOutfitMeshComponent);
 	}
 
-	if (USkeletalMesh* BootsOutfitMesh = LoadSkeletalMeshForPath(GetStarterBootsOutfitMeshPath(CharacterAppearance.Sex)))
+	if (USkeletalMesh* BootsOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterBootsOutfitMesh(CharacterAppearance.Sex)))
 	{
 		BootsOutfitMeshComponent->SetSkeletalMesh(BootsOutfitMesh);
 		BootsOutfitMeshComponent->SetLeaderPoseComponent(GetMesh());
 		ShowModularMesh(BootsOutfitMeshComponent);
 	}
 
-	if (UMaterialInterface* BodyMaterial = LoadMaterialForPath(GetBodyMaterialPath(CharacterAppearance.Sex, CharacterAppearance.SkinPresetIndex)))
+	if (UMaterialInterface* BodyMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::BodyMaterial(CharacterAppearance.Sex, CharacterAppearance.SkinPresetIndex)))
 	{
 		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
 		bool bAppliedBodyMaterial = false;
@@ -1543,26 +1635,35 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		}
 	}
 
-	if (UMaterialInterface* HeadMaterial = LoadMaterialForPath(GetHeadMaterialPath(CharacterAppearance.Sex, CharacterAppearance.HeadPresetIndex)))
+	if (UMaterialInterface* HeadMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::HeadMaterial(CharacterAppearance.Sex, CharacterAppearance.HeadPresetIndex)))
 	{
+		UMaterialInterface* ResolvedHeadMaterial = HeadMaterial;
+		if (UTexture2D* UnderhairTexture = LoadTextureForPath(FWUCharacterAssetPaths::UnderhairTexture(CharacterAppearance.Sex, CharacterAppearance.HairColorIndex)))
+		{
+			UMaterialInstanceDynamic* DynamicHeadMaterial = UMaterialInstanceDynamic::Create(HeadMaterial, this);
+			DynamicHeadMaterial->SetTextureParameterValue(TEXT("Underhair_D"), UnderhairTexture);
+			ResolvedHeadMaterial = DynamicHeadMaterial;
+		}
+
 		bool bAppliedHeadMaterial = false;
 		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
 		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
 		{
 			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
 			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
 			{
-				HeadMeshComponent->SetMaterial(MaterialIndex, HeadMaterial);
+				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
 				bAppliedHeadMaterial = true;
 			}
 		}
 
 		if (!bAppliedHeadMaterial && HeadMeshComponent->GetNumMaterials() > 0)
 		{
-			HeadMeshComponent->SetMaterial(0, HeadMaterial);
+			HeadMeshComponent->SetMaterial(0, ResolvedHeadMaterial);
 		}
 
 		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
@@ -1570,15 +1671,39 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		{
 			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
 			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
+				&& !SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
 				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
 					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)))
 			{
-				GetMesh()->SetMaterial(MaterialIndex, HeadMaterial);
+				GetMesh()->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
 			}
 		}
 	}
 
-	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(GetEyeMaterialPath(CharacterAppearance.EyeColorIndex)))
+	if (UMaterialInterface* FacialsMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::FacialsMaterial(CharacterAppearance.Sex, CharacterAppearance.HairColorIndex)))
+	{
+		const TArray<FName> HeadMaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < HeadMaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = HeadMaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase))
+			{
+				HeadMeshComponent->SetMaterial(MaterialIndex, FacialsMaterial);
+			}
+		}
+
+		const TArray<FName> BodyMaterialSlotNames = GetMesh()->GetMaterialSlotNames();
+		for (int32 MaterialIndex = 0; MaterialIndex < BodyMaterialSlotNames.Num(); ++MaterialIndex)
+		{
+			const FString SlotName = BodyMaterialSlotNames[MaterialIndex].ToString();
+			if (SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase))
+			{
+				GetMesh()->SetMaterial(MaterialIndex, FacialsMaterial);
+			}
+		}
+	}
+
+	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::EyeMaterial(CharacterAppearance.EyeColorIndex)))
 	{
 		bool bAppliedEyeMaterial = false;
 		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
@@ -1608,7 +1733,7 @@ void AWUCharacter::ApplyCharacterAppearanceMeshes()
 		}
 	}
 
-	if (UMaterialInterface* HairMaterial = LoadMaterialForPath(GetHairMaterialPath(CharacterAppearance.HairColorIndex)))
+	if (UMaterialInterface* HairMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::HairMaterial(CharacterAppearance.HairColorIndex)))
 	{
 		const int32 HairMaterialCount = HairMeshComponent->GetNumMaterials();
 		for (int32 MaterialIndex = 0; MaterialIndex < HairMaterialCount; ++MaterialIndex)
@@ -1754,6 +1879,11 @@ UMaterialInterface* AWUCharacter::LoadMaterialForPath(const TCHAR* AssetPath) co
 	return AssetPath ? LoadObject<UMaterialInterface>(nullptr, AssetPath) : nullptr;
 }
 
+UTexture2D* AWUCharacter::LoadTextureForPath(const TCHAR* AssetPath) const
+{
+	return AssetPath ? LoadObject<UTexture2D>(nullptr, AssetPath) : nullptr;
+}
+
 UAnimationAsset* AWUCharacter::LoadAnimationAssetForPath(const TCHAR* AssetPath) const
 {
 	return AssetPath ? LoadObject<UAnimationAsset>(nullptr, AssetPath) : nullptr;
@@ -1762,283 +1892,6 @@ UAnimationAsset* AWUCharacter::LoadAnimationAssetForPath(const TCHAR* AssetPath)
 UClass* AWUCharacter::LoadAnimClassForPath(const TCHAR* AssetPath) const
 {
 	return AssetPath ? LoadClass<UAnimInstance>(nullptr, AssetPath) : nullptr;
-}
-
-const TCHAR* AWUCharacter::GetBodyMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/SK_Hu_F_FullBody.SK_Hu_F_FullBody")
-		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/SK_Hu_M_FullBody.SK_Hu_M_FullBody");
-}
-
-const TCHAR* AWUCharacter::GetHeadMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Head.SK_Hu_F_Head")
-		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Head.SK_Hu_M_Head");
-}
-
-const TCHAR* AWUCharacter::GetHairMeshPath(EWUCharacterSex Sex, int32 HairStyleIndex) const
-{
-	static const TCHAR* FemaleHairPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_01.SK_Hu_F_Hair_01"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_02.SK_Hu_F_Hair_02"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_03.SK_Hu_F_Hair_03"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_04.SK_Hu_F_Hair_04"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_07.SK_Hu_F_Hair_07"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_08.SK_Hu_F_Hair_08"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Customization/Hair/SK_Hu_F_Hair_10.SK_Hu_F_Hair_10")
-	};
-
-	static const TCHAR* MaleHairPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Hair/SK_Hu_M_Hair_01.SK_Hu_M_Hair_01"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Hair/SK_Hu_M_Hair_02.SK_Hu_M_Hair_02"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Hair/SK_Hu_M_Hair_03.SK_Hu_M_Hair_03"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Hair/SK_Hu_M_Hair_04.SK_Hu_M_Hair_04"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Hair/SK_Hu_M_Hair_09.SK_Hu_M_Hair_09")
-	};
-
-	if (Sex == EWUCharacterSex::Female)
-	{
-		return FemaleHairPaths[NormalizeAppearanceIndex(HairStyleIndex, UE_ARRAY_COUNT(FemaleHairPaths))];
-	}
-
-	return MaleHairPaths[NormalizeAppearanceIndex(HairStyleIndex, UE_ARRAY_COUNT(MaleHairPaths))];
-}
-
-const TCHAR* AWUCharacter::GetBrowsMeshPath(EWUCharacterSex Sex, int32 BrowStyleIndex) const
-{
-	if (Sex == EWUCharacterSex::Female)
-	{
-		return nullptr;
-	}
-
-	static const TCHAR* MaleBrowsPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Brows_01.SK_Hu_M_Brows_01"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Brows_02.SK_Hu_M_Brows_02"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Brows_03.SK_Hu_M_Brows_03"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Brows_04.SK_Hu_M_Brows_04")
-	};
-
-	return MaleBrowsPaths[NormalizeAppearanceIndex(BrowStyleIndex, UE_ARRAY_COUNT(MaleBrowsPaths))];
-}
-
-const TCHAR* AWUCharacter::GetBeardMeshPath(EWUCharacterSex Sex, int32 BeardStyleIndex) const
-{
-	if (Sex == EWUCharacterSex::Female || BeardStyleIndex <= 0)
-	{
-		return nullptr;
-	}
-
-	static const TCHAR* MaleBeardPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Beard_01.SK_Hu_M_Beard_01"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Beard_02.SK_Hu_M_Beard_02"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Beard_03.SK_Hu_M_Beard_03"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Beard_05.SK_Hu_M_Beard_05"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Beard_06.SK_Hu_M_Beard_06"),
-		TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Customization/Facial/SK_Hu_M_Beard_07.SK_Hu_M_Beard_07")
-	};
-
-	return MaleBeardPaths[NormalizeAppearanceIndex(BeardStyleIndex - 1, UE_ARRAY_COUNT(MaleBeardPaths))];
-}
-
-const TCHAR* AWUCharacter::GetBodyMaterialPath(EWUCharacterSex Sex, int32 SkinPresetIndex) const
-{
-	static const TCHAR* FemaleBodyMaterialPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_01.MI_Hu_F_Body_01"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_02.MI_Hu_F_Body_02"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_03.MI_Hu_F_Body_03"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_04.MI_Hu_F_Body_04"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Body/MI_Hu_F_Body_05.MI_Hu_F_Body_05")
-	};
-
-	static const TCHAR* MaleBodyMaterialPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_01.MI_Hu_M_Body_01"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_02.MI_Hu_M_Body_02"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_03.MI_Hu_M_Body_03"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_04.MI_Hu_M_Body_04"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Body/MI_Hu_M_Body_05.MI_Hu_M_Body_05")
-	};
-
-	if (Sex == EWUCharacterSex::Female)
-	{
-		return FemaleBodyMaterialPaths[NormalizeAppearanceIndex(SkinPresetIndex, UE_ARRAY_COUNT(FemaleBodyMaterialPaths))];
-	}
-
-	return MaleBodyMaterialPaths[NormalizeAppearanceIndex(SkinPresetIndex, UE_ARRAY_COUNT(MaleBodyMaterialPaths))];
-}
-
-const TCHAR* AWUCharacter::GetHeadMaterialPath(EWUCharacterSex Sex, int32 HeadPresetIndex) const
-{
-	static const TCHAR* FemaleHeadMaterialPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Head/MI_Hu_F_Head_01_A.MI_Hu_F_Head_01_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Head/MI_Hu_F_Head_02_A.MI_Hu_F_Head_02_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Head/MI_Hu_F_Head_03_A.MI_Hu_F_Head_03_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Head/MI_Hu_F_Head_04_A.MI_Hu_F_Head_04_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Female/Head/MI_Hu_F_Head_05_A.MI_Hu_F_Head_05_A")
-	};
-
-	static const TCHAR* MaleHeadMaterialPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Head/MI_Hu_M_Head_01_A.MI_Hu_M_Head_01_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Head/MI_Hu_M_Head_02_A.MI_Hu_M_Head_02_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Head/MI_Hu_M_Head_03_A.MI_Hu_M_Head_03_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Head/MI_Hu_M_Head_04_A.MI_Hu_M_Head_04_A"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Male/Head/MI_Hu_M_Head_05_A.MI_Hu_M_Head_05_A")
-	};
-
-	if (Sex == EWUCharacterSex::Female)
-	{
-		return FemaleHeadMaterialPaths[NormalizeAppearanceIndex(HeadPresetIndex, UE_ARRAY_COUNT(FemaleHeadMaterialPaths))];
-	}
-
-	return MaleHeadMaterialPaths[NormalizeAppearanceIndex(HeadPresetIndex, UE_ARRAY_COUNT(MaleHeadMaterialPaths))];
-}
-
-const TCHAR* AWUCharacter::GetEyeMaterialPath(int32 EyeColorIndex) const
-{
-	static const TCHAR* EyeMaterialPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Bl.MI_HU_Eye_Bl"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Br.MI_HU_Eye_Br"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Gn.MI_HU_Eye_Gn"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Eye/MI_HU_Eye_Pe.MI_HU_Eye_Pe")
-	};
-
-	return EyeMaterialPaths[NormalizeAppearanceIndex(EyeColorIndex, UE_ARRAY_COUNT(EyeMaterialPaths))];
-}
-
-const TCHAR* AWUCharacter::GetHairMaterialPath(int32 HairColorIndex) const
-{
-	static const TCHAR* HairMaterialPaths[] =
-	{
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Hair/MI_HU_Hair_01_Bk.MI_HU_Hair_01_Bk"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Hair/MI_HU_Hair_01_Bd.MI_HU_Hair_01_Bd"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Hair/MI_HU_Hair_01_Br.MI_HU_Hair_01_Br"),
-		TEXT("/Game/StylizedCharacter/Materials/Instances/Character/Human/Hair/MI_HU_Hair_01_Gr.MI_HU_Hair_01_Gr")
-	};
-
-	return HairMaterialPaths[NormalizeAppearanceIndex(HairColorIndex, UE_ARRAY_COUNT(HairMaterialPaths))];
-}
-
-const TCHAR* AWUCharacter::GetAnimationBlueprintPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/ABP_Hu_F.ABP_Hu_F_C")
-		: TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/ABP_Hu_M.ABP_Hu_M_C");
-}
-
-const TCHAR* AWUCharacter::GetBackpedalAnimationPath(EWUCharacterSex Sex, float Right) const
-{
-	if (Sex == EWUCharacterSex::Female)
-	{
-		if (Right < -0.2f)
-		{
-			return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Walk_BackwardLeft.A_Hu_F_Walk_BackwardLeft");
-		}
-
-		if (Right > 0.2f)
-		{
-			return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Walk_BackwardRight.A_Hu_F_Walk_BackwardRight");
-		}
-
-		return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Walk_Backwards.A_Hu_F_Walk_Backwards");
-	}
-
-	if (Right < -0.2f)
-	{
-		return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_BackwardLeft.A_Hu_M_Walk_BackwardLeft");
-	}
-
-	if (Right > 0.2f)
-	{
-		return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_BackwardRight.A_Hu_M_Walk_BackwardRight");
-	}
-
-	return TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Walk_Backwards.A_Hu_M_Walk_Backwards");
-}
-
-const TCHAR* AWUCharacter::GetTurnInPlaceAnimationPath(EWUCharacterSex Sex, float YawDeltaDegrees) const
-{
-	const bool bTurnRight = YawDeltaDegrees > 0.0f;
-
-	if (Sex == EWUCharacterSex::Female)
-	{
-		return bTurnRight
-			? TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Idle_StepRight.A_Hu_F_Idle_StepRight")
-			: TEXT("/Game/StylizedCharacter/Animations/Character/Human/Female/A_Hu_F_Idle_StepLeft.A_Hu_F_Idle_StepLeft");
-	}
-
-	return bTurnRight
-		? TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Idle_StepRight.A_Hu_M_Idle_StepRight")
-		: TEXT("/Game/StylizedCharacter/Animations/Character/Human/Male/A_Hu_M_Idle_StepLeft.A_Hu_M_Idle_StepLeft");
-}
-
-const TCHAR* AWUCharacter::GetPantsMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Pants.SK_Hu_F_Pants")
-		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Pants.SK_Hu_M_Pants");
-}
-
-const TCHAR* AWUCharacter::GetHandsMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Hands.SK_Hu_F_Hands")
-		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Hands.SK_Hu_M_Hands");
-}
-
-const TCHAR* AWUCharacter::GetBracersMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Female/Base/SK_Hu_F_Bracers.SK_Hu_F_Bracers")
-		: TEXT("/Game/StylizedCharacter/Meshes/Character/Human/Male/Base/SK_Hu_M_Bracers.SK_Hu_M_Bracers");
-}
-
-const TCHAR* AWUCharacter::GetStarterChestOutfitMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Chest/SK_Hu_F_Chest_Peasant_01.SK_Hu_F_Chest_Peasant_01")
-		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Chest/SK_Hu_M_Chest_Peasant_01.SK_Hu_M_Chest_Peasant_01");
-}
-
-const TCHAR* AWUCharacter::GetStarterChestAddOutfitMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/ChestAdd/SK_Hu_F_ChestAdd_Peasant.SK_Hu_F_ChestAdd_Peasant")
-		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/ChestAdd/SK_Hu_M_ChestAdd_Peasant.SK_Hu_M_ChestAdd_Peasant");
-}
-
-const TCHAR* AWUCharacter::GetStarterBeltOutfitMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Belt/SK_Hu_F_Belt_Peasant.SK_Hu_F_Belt_Peasant")
-		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Belt/SK_Hu_M_Belt_Peasant.SK_Hu_M_Belt_Peasant");
-}
-
-const TCHAR* AWUCharacter::GetStarterBootsOutfitMeshPath(EWUCharacterSex Sex) const
-{
-	return Sex == EWUCharacterSex::Female
-		? TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Boots/SK_Hu_F_Boots_Peasant.SK_Hu_F_Boots_Peasant")
-		: TEXT("/Game/StylizedCharacter/Meshes/Item/Equipment/Boots/SK_Hu_M_Boots_Peasant.SK_Hu_M_Boots_Peasant");
-}
-
-int32 AWUCharacter::NormalizeAppearanceIndex(int32 Index, int32 Count) const
-{
-	if (Count <= 0)
-	{
-		return 0;
-	}
-
-	const int32 Mod = Index % Count;
-	return Mod < 0 ? Mod + Count : Mod;
 }
 
 void AWUCharacter::ServerApplyCharacterAppearance_Implementation(const FWUCharacterAppearance& NewAppearance)
@@ -2056,6 +1909,21 @@ void AWUCharacter::ServerEquipInventorySlot_Implementation(int32 SlotIndex)
 void AWUCharacter::ServerUnequipEquipmentSlot_Implementation(EWUEquipmentSlot EquipmentSlot)
 {
 	UnequipEquipmentSlot(EquipmentSlot);
+}
+
+void AWUCharacter::ServerAddInventoryItemById_Implementation(FName ItemId)
+{
+	AddInventoryItemById(ItemId);
+}
+
+void AWUCharacter::ServerApplyPersistentInventoryItemIds_Implementation(const TArray<FName>& ItemIds)
+{
+	ApplyPersistentInventoryItemIds(ItemIds);
+}
+
+void AWUCharacter::ServerRemoveInventoryItemAtSlot_Implementation(int32 SlotIndex)
+{
+	RemoveInventoryItemAtSlot(SlotIndex);
 }
 
 void AWUCharacter::StartAttack()

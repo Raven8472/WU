@@ -1,10 +1,17 @@
 using WU.Application.Backend;
 using WU.Application.Auth;
 using WU.Application.Characters;
+using WU.Application.Clubs;
+using WU.Application.Currency;
+using WU.Application.Inventory;
+using WU.Application.Vendors;
 using WU.Domain.Characters;
 using WU.Infrastructure.Auth;
 using WU.Infrastructure.Characters;
+using WU.Infrastructure.Clubs;
 using WU.Infrastructure.Configuration;
+using WU.Infrastructure.Currency;
+using WU.Infrastructure.Inventory;
 using Npgsql;
 using System.Text.Json.Serialization;
 
@@ -28,6 +35,13 @@ builder.Services.AddScoped<CharacterQueryService>();
 builder.Services.AddScoped<CharacterLocationService>();
 builder.Services.AddScoped<CharacterExperienceService>();
 builder.Services.AddScoped<CharacterDeletionService>();
+builder.Services.AddScoped<IClubRepository, PostgresClubRepository>();
+builder.Services.AddScoped<ClubService>();
+builder.Services.AddScoped<ICurrencyRepository, PostgresCurrencyRepository>();
+builder.Services.AddScoped<CurrencyService>();
+builder.Services.AddScoped<ICharacterInventoryRepository, PostgresCharacterInventoryRepository>();
+builder.Services.AddScoped<CharacterInventoryService>();
+builder.Services.AddScoped<VendorService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
 builder.Services.AddScoped<AuthService>();
@@ -160,6 +174,141 @@ app.MapPost("/api/characters/{characterId:guid}/experience", async (Guid charact
         CharacterExperienceStatus.NotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
         CharacterExperienceStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_character_experience_request", messages = result.Errors }),
         _ => Results.Problem("The character experience could not be updated.")
+    };
+});
+
+app.MapPost("/api/clubs", async (CreateClubRequest request, ClubService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.CreateAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        ClubCreateStatus.Created => Results.Created($"/api/clubs/{result.Club!.ClubId}", result.Club),
+        ClubCreateStatus.PresidentNotFound => Results.NotFound(new { error = "president_not_found", message = "The president character could not be found for that account and realm." }),
+        ClubCreateStatus.PresidentAlreadyInClub => Results.Conflict(new { error = "president_already_in_club", message = "That character is already in a club." }),
+        ClubCreateStatus.NameTaken => Results.Conflict(new { error = "club_name_taken", message = "That club name is already taken on this realm." }),
+        ClubCreateStatus.TagTaken => Results.Conflict(new { error = "club_tag_taken", message = "That club tag is already taken on this realm." }),
+        ClubCreateStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_create_request", messages = result.Errors }),
+        _ => Results.Problem("The club could not be created.")
+    };
+});
+
+app.MapPost("/api/clubs/{clubId:guid}/invites", async (Guid clubId, InviteClubMemberRequest request, ClubService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.InviteAsync(clubId, request, cancellationToken);
+
+    return result.Status switch
+    {
+        ClubInviteResultStatus.Invited => Results.Created($"/api/clubs/{clubId}/invites/{result.Invite!.InviteId}", result.Invite),
+        ClubInviteResultStatus.ClubNotFound => Results.NotFound(new { error = "club_not_found", message = "The club could not be found." }),
+        ClubInviteResultStatus.InviterNotMember => Results.StatusCode(StatusCodes.Status403Forbidden),
+        ClubInviteResultStatus.InviterNotAllowed => Results.StatusCode(StatusCodes.Status403Forbidden),
+        ClubInviteResultStatus.InviteeNotFound => Results.NotFound(new { error = "invitee_not_found", message = "The invited character could not be found on this realm." }),
+        ClubInviteResultStatus.InviteeAlreadyInClub => Results.Conflict(new { error = "invitee_already_in_club", message = "That character is already in a club." }),
+        ClubInviteResultStatus.InviteAlreadyPending => Results.Conflict(new { error = "club_invite_pending", message = "That character already has a pending invite to this club." }),
+        ClubInviteResultStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_invite_request", messages = result.Errors }),
+        _ => Results.Problem("The club invite could not be created.")
+    };
+});
+
+app.MapGet("/api/clubs/{clubId:guid}/roster", async (Guid clubId, Guid viewerCharacterId, bool includeOffline, ClubService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.GetRosterAsync(clubId, viewerCharacterId, includeOffline, cancellationToken);
+
+    return result.Status switch
+    {
+        ClubRosterStatus.Found => Results.Ok(result.Roster),
+        ClubRosterStatus.ClubNotFound => Results.NotFound(new { error = "club_not_found", message = "The club could not be found." }),
+        ClubRosterStatus.ViewerNotMember => Results.StatusCode(StatusCodes.Status403Forbidden),
+        ClubRosterStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_roster_request", messages = result.Errors }),
+        _ => Results.Problem("The club roster could not be loaded.")
+    };
+});
+
+app.MapGet("/api/currency/accounts/{accountId:guid}/realms/{realmId:guid}/characters/{characterId:guid}", async (Guid accountId, Guid realmId, Guid characterId, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.GetSnapshotAsync(accountId, realmId, characterId, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencySnapshotStatus.Found => Results.Ok(result.Snapshot),
+        CurrencySnapshotStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CurrencySnapshotStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_snapshot_request", messages = result.Errors }),
+        _ => Results.Problem("The currency snapshot could not be loaded.")
+    };
+});
+
+app.MapPost("/api/currency/bank/deposit", async (BankCurrencyTransferRequest request, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.DepositToBankAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencyOperationStatus.Completed => Results.Ok(new { result.Snapshot, result.Transaction }),
+        CurrencyOperationStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "You do not have enough money." }),
+        CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_deposit_request", messages = result.Errors }),
+        _ => Results.Problem("The currency deposit could not be completed.")
+    };
+});
+
+app.MapPost("/api/currency/bank/withdraw", async (BankCurrencyTransferRequest request, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.WithdrawFromBankAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencyOperationStatus.Completed => Results.Ok(new { result.Snapshot, result.Transaction }),
+        CurrencyOperationStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "You do not have enough money." }),
+        CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_withdraw_request", messages = result.Errors }),
+        _ => Results.Problem("The currency withdrawal could not be completed.")
+    };
+});
+
+app.MapPost("/api/currency/transfers/player", async (PlayerCurrencyTransferRequest request, CurrencyService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.TransferToCharacterAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        CurrencyOperationStatus.Completed => Results.Ok(new { result.Snapshot, result.TargetCharacterWallet, result.Transaction }),
+        CurrencyOperationStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The sending character could not be found for that account and realm." }),
+        CurrencyOperationStatus.TargetCharacterNotFound => Results.NotFound(new { error = "target_character_not_found", message = "The receiving character could not be found on that realm." }),
+        CurrencyOperationStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "You do not have enough money." }),
+        CurrencyOperationStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_currency_transfer_request", messages = result.Errors }),
+        _ => Results.Problem("The currency transfer could not be completed.")
+    };
+});
+
+app.MapGet("/api/inventory/accounts/{accountId:guid}/realms/{realmId:guid}/characters/{characterId:guid}", async (Guid accountId, Guid realmId, Guid characterId, CharacterInventoryService service, CancellationToken cancellationToken) =>
+{
+    var snapshot = await service.GetSnapshotAsync(accountId, realmId, characterId, cancellationToken);
+    return snapshot is null
+        ? Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." })
+        : Results.Ok(snapshot);
+});
+
+app.MapGet("/api/vendors/{vendorTableId}", (string vendorTableId, VendorService service) =>
+{
+    var table = service.FindTable(vendorTableId);
+    return table is null
+        ? Results.NotFound(new { error = "vendor_table_not_found", message = "The vendor table could not be found." })
+        : Results.Ok(table);
+});
+
+app.MapPost("/api/vendors/purchase", async (VendorPurchaseRequest request, VendorService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.PurchaseAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        VendorPurchaseStatus.Purchased => Results.Ok(result.Purchase),
+        VendorPurchaseStatus.ItemNotFound => Results.NotFound(new { error = "vendor_item_not_found", message = "That item is not sold by that vendor table." }),
+        VendorPurchaseStatus.CharacterNotFound => Results.NotFound(new { error = "character_not_found", message = "The character could not be found for that account and realm." }),
+        VendorPurchaseStatus.InsufficientFunds => Results.Conflict(new { error = "insufficient_funds", message = "You do not have enough money." }),
+        VendorPurchaseStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_vendor_purchase_request", messages = result.Errors }),
+        _ => Results.Problem("The vendor purchase could not be completed.")
     };
 });
 

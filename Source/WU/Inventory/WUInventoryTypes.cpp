@@ -15,15 +15,20 @@ namespace WUInventory
 			const FLinearColor& ItemTint,
 			EWUItemVisualLayer VisualLayer = EWUItemVisualLayer::None,
 			bool bCoversTorso = false,
-			bool bCoversLegs = false)
+			bool bCoversLegs = false,
+			bool bEquippable = true,
+			EWUItemUseType UseType = EWUItemUseType::None,
+			const TCHAR* IconTexturePath = TEXT(""))
 		{
 			FWUInventoryItem Item;
 			Item.ItemId = ItemId;
 			Item.DisplayName = DisplayName;
 			Item.EquipmentSlot = EquipmentSlot;
-			Item.bEquippable = true;
+			Item.bEquippable = bEquippable;
+			Item.UseType = UseType;
 			Item.ItemTint = ItemTint;
 			Item.IconId = ItemId;
+			Item.IconTexturePath = IconTexturePath;
 			Item.VisualLayer = VisualLayer;
 			Item.bCoversTorso = bCoversTorso;
 			Item.bCoversLegs = bCoversLegs;
@@ -100,7 +105,18 @@ namespace WUInventory
 					TEXT("starter_nicnak"),
 					TEXT("Tiny Nicnak"),
 					EWUEquipmentSlot::Nicnak1,
-					FLinearColor(0.45f, 0.64f, 0.88f, 1.0f))
+					FLinearColor(0.45f, 0.64f, 0.88f, 1.0f)),
+				MakeDefinition(
+					GetClubCharterItemId(),
+					TEXT("Club Charter"),
+					EWUEquipmentSlot::Nicnak1,
+					FLinearColor(0.90f, 0.66f, 0.22f, 1.0f),
+					EWUItemVisualLayer::None,
+					false,
+					false,
+					false,
+					EWUItemUseType::ClubCharter,
+					TEXT("/Game/UI/Icons/Items/T_Item_ClubCharter.T_Item_ClubCharter"))
 			};
 
 			return Definitions;
@@ -162,6 +178,58 @@ namespace WUInventory
 		return ItemIds;
 	}
 
+	const TArray<FWUVendorTable>& GetVendorTables()
+	{
+		static const TArray<FWUVendorTable> VendorTables =
+		{
+			FWUVendorTable
+			{
+				GetClubVendorTableId(),
+				LOCTEXT("ClubVendorTableName", "Club Vendor"),
+				TArray<FWUVendorItem>
+				{
+					FWUVendorItem
+					{
+						GetClubVendorTableId(),
+						GetClubCharterItemId(),
+						ClubCharterPriceKnuts
+					}
+				}
+			}
+		};
+
+		return VendorTables;
+	}
+
+	const FWUVendorTable* FindVendorTable(FName VendorTableId)
+	{
+		for (const FWUVendorTable& VendorTable : GetVendorTables())
+		{
+			if (VendorTable.VendorTableId == VendorTableId)
+			{
+				return &VendorTable;
+			}
+		}
+
+		return nullptr;
+	}
+
+	const FWUVendorItem* FindVendorItem(FName VendorTableId, FName ItemId)
+	{
+		if (const FWUVendorTable* VendorTable = FindVendorTable(VendorTableId))
+		{
+			for (const FWUVendorItem& VendorItem : VendorTable->Items)
+			{
+				if (VendorItem.ItemId == ItemId)
+				{
+					return &VendorItem;
+				}
+			}
+		}
+
+		return nullptr;
+	}
+
 	const FWUInventoryItem* FindItemDefinition(FName ItemId)
 	{
 		for (const FWUInventoryItem& Definition : GetItemDefinitions())
@@ -189,6 +257,21 @@ namespace WUInventory
 		MissingItem.bEquippable = false;
 		MissingItem.ItemTint = FLinearColor(0.45f, 0.18f, 0.18f, 1.0f);
 		return MissingItem;
+	}
+
+	bool IsUsableItem(const FWUInventoryItem& Item)
+	{
+		return Item.UseType != EWUItemUseType::None;
+	}
+
+	FName GetClubCharterItemId()
+	{
+		return TEXT("club_charter");
+	}
+
+	FName GetClubVendorTableId()
+	{
+		return TEXT("vendor_table_01");
 	}
 
 	FText EquipmentSlotToText(EWUEquipmentSlot Slot)
@@ -232,6 +315,33 @@ namespace WUInventory
 		default:
 			return LOCTEXT("UnknownSlot", "Unknown");
 		}
+	}
+
+	FText ItemUseTypeToText(EWUItemUseType UseType)
+	{
+		switch (UseType)
+		{
+		case EWUItemUseType::ClubCharter:
+			return LOCTEXT("ClubCharterUseType", "Creates a new club");
+		case EWUItemUseType::None:
+		default:
+			return LOCTEXT("NoUseType", "No use");
+		}
+	}
+
+	FText FormatCurrencyAmountKnuts(int64 AmountKnuts)
+	{
+		const int64 ClampedAmount = FMath::Max<int64>(0, AmountKnuts);
+		const int64 Galleons = ClampedAmount / KnutsPerGalleon;
+		const int64 RemainderAfterGalleons = ClampedAmount % KnutsPerGalleon;
+		const int64 Sickles = RemainderAfterGalleons / KnutsPerSickle;
+		const int64 Knuts = RemainderAfterGalleons % KnutsPerSickle;
+
+		return FText::Format(
+			LOCTEXT("CurrencyAmount", "{0} G  {1} S  {2} K"),
+			FText::AsNumber(Galleons),
+			FText::AsNumber(Sickles),
+			FText::AsNumber(Knuts));
 	}
 
 	FString GetShortItemLabel(const FWUInventoryItem& Item)

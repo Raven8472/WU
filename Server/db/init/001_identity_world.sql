@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS characters (
     normalized_name text NOT NULL,
     race smallint NOT NULL,
     sex smallint NOT NULL,
-    house smallint NULL,
+    house smallint NOT NULL DEFAULT 0,
     level integer NOT NULL DEFAULT 1,
     current_zone_id uuid NULL REFERENCES zones(id),
     position_x real NOT NULL DEFAULT 0,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS characters (
     CONSTRAINT ck_characters_normalized_name CHECK (normalized_name = lower(name)),
     CONSTRAINT ck_characters_race CHECK (race BETWEEN 0 AND 2),
     CONSTRAINT ck_characters_sex CHECK (sex BETWEEN 0 AND 1),
-    CONSTRAINT ck_characters_house CHECK (house IS NULL OR house BETWEEN 0 AND 3),
+    CONSTRAINT ck_characters_house CHECK (house BETWEEN 0 AND 4),
     CONSTRAINT ck_characters_level CHECK (level >= 1)
 );
 
