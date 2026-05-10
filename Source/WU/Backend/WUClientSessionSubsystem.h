@@ -243,6 +243,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterSignature, 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharacterDeletedSignature, const FString&, CharacterId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubSignature, const FWUClubSummary&, Club);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubInviteSignature, const FWUBackendClubInviteSummary&, Invite);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubMemberRemovedSignature, const FString&, CharacterId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubMembersSignature, const TArray<FWUClubMemberSummary>&, Members);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCurrencySnapshotSignature, const FWUBackendCurrencySnapshot&, Snapshot);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionInventorySnapshotSignature, const FWUBackendInventorySnapshot&, Snapshot);
@@ -284,6 +285,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
 	FWUClientSessionClubInviteSignature OnClubInviteCreated;
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
+	FWUClientSessionClubMemberRemovedSignature OnClubMemberRemoved;
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Club")
 	FWUClientSessionClubMembersSignature OnClubRosterLoaded;
@@ -333,7 +337,10 @@ public:
 	void CreateClubFromSelectedCharter(const FString& Name, int32 CharterSlotIndex, const FString& CharterItemId);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Club")
-	void InviteCharacterToSelectedClub(const FString& InvitedCharacterId);
+	void InviteCharacterToSelectedClub(const FString& InvitedCharacterNameOrId);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Club")
+	void KickCharacterFromSelectedClub(const FString& MemberCharacterId);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Club")
 	void LoadSelectedClubRoster(bool bIncludeOffline);
@@ -403,6 +410,7 @@ private:
 	void HandleAwardCharacterExperienceResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleCreateClubResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleKickClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleRefreshCurrencySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleRefreshInventorySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
@@ -453,4 +461,5 @@ private:
 	bool bHasCurrencySnapshot = false;
 	FWUBackendInventorySnapshot InventorySnapshot;
 	bool bHasInventorySnapshot = false;
+	FString PendingClubKickCharacterId;
 };

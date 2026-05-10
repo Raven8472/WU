@@ -266,7 +266,7 @@ void UWUClientSessionSubsystem::CreateClubFromSelectedCharter(const FString& Nam
 	Request->ProcessRequest();
 }
 
-void UWUClientSessionSubsystem::InviteCharacterToSelectedClub(const FString& InvitedCharacterId)
+void UWUClientSessionSubsystem::InviteCharacterToSelectedClub(const FString& InvitedCharacterNameOrId)
 {
 	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
 	{
@@ -274,13 +274,15 @@ void UWUClientSessionSubsystem::InviteCharacterToSelectedClub(const FString& Inv
 		return;
 	}
 
-	if (InvitedCharacterId.IsEmpty())
+	FString TrimmedInviteTarget = InvitedCharacterNameOrId;
+	TrimmedInviteTarget.TrimStartAndEndInline();
+	if (TrimmedInviteTarget.IsEmpty())
 	{
 		OnRequestFailed.Broadcast(TEXT("Choose a character to invite."));
 		return;
 	}
 
-	if (InvitedCharacterId == SelectedCharacterId)
+	if (TrimmedInviteTarget == SelectedCharacterId)
 	{
 		OnRequestFailed.Broadcast(TEXT("A character cannot invite itself."));
 		return;
@@ -295,12 +297,68 @@ void UWUClientSessionSubsystem::InviteCharacterToSelectedClub(const FString& Inv
 
 	TSharedPtr<FJsonObject> RootObject = MakeShared<FJsonObject>();
 	RootObject->SetStringField(TEXT("inviterCharacterId"), SelectedCharacterId);
-	RootObject->SetStringField(TEXT("invitedCharacterId"), InvitedCharacterId);
+
+	FGuid ParsedCharacterId;
+	if (FGuid::Parse(TrimmedInviteTarget, ParsedCharacterId))
+	{
+		RootObject->SetStringField(TEXT("invitedCharacterId"), TrimmedInviteTarget);
+	}
+	else
+	{
+		RootObject->SetStringField(TEXT("invitedCharacterName"), TrimmedInviteTarget);
+	}
 
 	const FString Path = FString::Printf(TEXT("/api/clubs/%s/invites"), *SelectedCharacter->Club.ClubId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
 	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleInviteClubMemberResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::KickCharacterFromSelectedClub(const FString& MemberCharacterId)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before kicking a club member."));
+		return;
+	}
+
+	FString TrimmedMemberCharacterId = MemberCharacterId;
+	TrimmedMemberCharacterId.TrimStartAndEndInline();
+	if (TrimmedMemberCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Choose a club member to kick."));
+		return;
+	}
+
+	if (TrimmedMemberCharacterId == SelectedCharacterId)
+	{
+		OnRequestFailed.Broadcast(TEXT("A character cannot kick itself from the club."));
+		return;
+	}
+
+	const FWUBackendCharacterSummary* SelectedCharacter = FindCachedCharacter(SelectedCharacterId);
+	if (!SelectedCharacter || !SelectedCharacter->Club.HasClub())
+	{
+		OnRequestFailed.Broadcast(TEXT("The selected character is not in a club."));
+		return;
+	}
+
+	FGuid ParsedCharacterId;
+	if (!FGuid::Parse(TrimmedMemberCharacterId, ParsedCharacterId))
+	{
+		OnRequestFailed.Broadcast(TEXT("The selected club member has an invalid character id."));
+		return;
+	}
+
+	PendingClubKickCharacterId = TrimmedMemberCharacterId;
+	const FString Path = FString::Printf(
+		TEXT("/api/clubs/%s/members/%s?actorCharacterId=%s"),
+		*SelectedCharacter->Club.ClubId,
+		*TrimmedMemberCharacterId,
+		*SelectedCharacterId);
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("DELETE"), Path);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleKickClubMemberResponse);
 	Request->ProcessRequest();
 }
 
@@ -798,6 +856,26 @@ void UWUClientSessionSubsystem::HandleInviteClubMemberResponse(FHttpRequestPtr R
 	}
 
 	OnClubInviteCreated.Broadcast(Invite);
+}
+
+void UWUClientSessionSubsystem::HandleKickClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	const FString RemovedCharacterId = PendingClubKickCharacterId;
+	PendingClubKickCharacterId.Empty();
+
+	if (!bSucceeded || !Response.IsValid())
+	{
+		OnRequestFailed.Broadcast(TEXT("Backend request failed."));
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()) && Response->GetResponseCode() != EHttpResponseCodes::NoContent)
+	{
+		OnRequestFailed.Broadcast(ExtractBackendError(Response));
+		return;
+	}
+
+	OnClubMemberRemoved.Broadcast(RemovedCharacterId);
 }
 
 void UWUClientSessionSubsystem::HandleLoadClubRosterResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)

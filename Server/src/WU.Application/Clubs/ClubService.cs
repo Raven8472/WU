@@ -77,12 +77,16 @@ public sealed class ClubService(IClubRepository repository)
             errors.Add("inviterCharacterId is required.");
         }
 
-        if (request.InvitedCharacterId == Guid.Empty)
+        var invitedCharacterName = (request.InvitedCharacterName ?? string.Empty).Trim();
+        var hasInvitedCharacterId = request.InvitedCharacterId.HasValue && request.InvitedCharacterId.Value != Guid.Empty;
+        var hasInvitedCharacterName = !string.IsNullOrWhiteSpace(invitedCharacterName);
+
+        if (!hasInvitedCharacterId && !hasInvitedCharacterName)
         {
-            errors.Add("invitedCharacterId is required.");
+            errors.Add("invitedCharacterId or invitedCharacterName is required.");
         }
 
-        if (request.InviterCharacterId == request.InvitedCharacterId)
+        if (hasInvitedCharacterId && request.InviterCharacterId == request.InvitedCharacterId)
         {
             errors.Add("a character cannot invite itself.");
         }
@@ -92,7 +96,39 @@ public sealed class ClubService(IClubRepository repository)
             return ClubInviteResult.Invalid(errors.ToArray());
         }
 
-        return await repository.InviteAsync(clubId, request.InviterCharacterId, request.InvitedCharacterId, cancellationToken);
+        return await repository.InviteAsync(clubId, request.InviterCharacterId, request.InvitedCharacterId, invitedCharacterName, cancellationToken);
+    }
+
+    public async Task<ClubMemberRemovalResult> RemoveMemberAsync(Guid clubId, RemoveClubMemberRequest request, CancellationToken cancellationToken)
+    {
+        List<string> errors = [];
+
+        if (clubId == Guid.Empty)
+        {
+            errors.Add("clubId is required.");
+        }
+
+        if (request.ActorCharacterId == Guid.Empty)
+        {
+            errors.Add("actorCharacterId is required.");
+        }
+
+        if (request.MemberCharacterId == Guid.Empty)
+        {
+            errors.Add("memberCharacterId is required.");
+        }
+
+        if (request.ActorCharacterId == request.MemberCharacterId)
+        {
+            return ClubMemberRemovalResult.CannotRemoveSelf();
+        }
+
+        if (errors.Count > 0)
+        {
+            return ClubMemberRemovalResult.Invalid(errors.ToArray());
+        }
+
+        return await repository.RemoveMemberAsync(clubId, request.ActorCharacterId, request.MemberCharacterId, cancellationToken);
     }
 
     public async Task<ClubRosterResult> GetRosterAsync(Guid clubId, Guid viewerCharacterId, bool includeOffline, CancellationToken cancellationToken)

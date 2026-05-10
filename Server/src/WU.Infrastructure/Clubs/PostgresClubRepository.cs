@@ -170,7 +170,12 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         }
     }
 
-    public async Task<ClubInviteResult> InviteAsync(Guid clubId, Guid inviterCharacterId, Guid invitedCharacterId, CancellationToken cancellationToken)
+    public async Task<ClubInviteResult> InviteAsync(
+        Guid clubId,
+        Guid inviterCharacterId,
+        Guid? invitedCharacterId,
+        string? invitedCharacterName,
+        CancellationToken cancellationToken)
     {
         await EnsureClubSchemaAsync(cancellationToken);
 
@@ -199,25 +204,48 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
                 return ClubInviteResult.InviterNotAllowed();
             }
 
-            if (!await CharacterExistsInRealmAsync(connection, transaction, club.RealmId, invitedCharacterId, cancellationToken))
+            Guid resolvedInvitedCharacterId;
+            if (invitedCharacterId.HasValue && invitedCharacterId.Value != Guid.Empty)
+            {
+                resolvedInvitedCharacterId = invitedCharacterId.Value;
+            }
+            else
+            {
+                var resolvedByName = await FindCharacterIdByNameInRealmAsync(connection, transaction, club.RealmId, invitedCharacterName ?? string.Empty, cancellationToken);
+                if (!resolvedByName.HasValue)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return ClubInviteResult.InviteeNotFound();
+                }
+
+                resolvedInvitedCharacterId = resolvedByName.Value;
+            }
+
+            if (resolvedInvitedCharacterId == inviterCharacterId)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubInviteResult.Invalid("a character cannot invite itself.");
+            }
+
+            if (!await CharacterExistsInRealmAsync(connection, transaction, club.RealmId, resolvedInvitedCharacterId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return ClubInviteResult.InviteeNotFound();
             }
 
-            if (await CharacterHasClubAsync(connection, transaction, invitedCharacterId, cancellationToken))
+            if (await CharacterHasClubAsync(connection, transaction, resolvedInvitedCharacterId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return ClubInviteResult.InviteeAlreadyInClub();
             }
 
-            if (await PendingInviteExistsAsync(connection, transaction, clubId, invitedCharacterId, cancellationToken))
+            if (await PendingInviteExistsAsync(connection, transaction, clubId, resolvedInvitedCharacterId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return ClubInviteResult.InviteAlreadyPending();
             }
 
-            var invite = await InsertInviteAsync(connection, transaction, clubId, inviterCharacterId, invitedCharacterId, cancellationToken);
+            var invite = await InsertInviteAsync(connection, transaction, clubId, inviterCharacterId, resolvedInvitedCharacterId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
             return ClubInviteResult.Invited(invite);
@@ -226,6 +254,65 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         {
             await transaction.RollbackAsync(cancellationToken);
             return ClubInviteResult.InviteAlreadyPending();
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<ClubMemberRemovalResult> RemoveMemberAsync(Guid clubId, Guid actorCharacterId, Guid memberCharacterId, CancellationToken cancellationToken)
+    {
+        await EnsureClubSchemaAsync(cancellationToken);
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var club = await GetClubInfoAsync(connection, transaction, clubId, cancellationToken);
+            if (club is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubMemberRemovalResult.ClubNotFound();
+            }
+
+            var actorMembership = await GetClubMembershipAsync(connection, transaction, clubId, actorCharacterId, cancellationToken);
+            if (actorMembership is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubMemberRemovalResult.ActorNotMember();
+            }
+
+            var targetMembership = await GetClubMembershipAsync(connection, transaction, clubId, memberCharacterId, cancellationToken);
+            if (targetMembership is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubMemberRemovalResult.MemberNotFound();
+            }
+
+            if (memberCharacterId == actorCharacterId)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubMemberRemovalResult.CannotRemoveSelf();
+            }
+
+            if (targetMembership.Value.Rank == EWuClubRank.President)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubMemberRemovalResult.CannotRemovePresident();
+            }
+
+            if (!CanKick(actorMembership.Value.Rank, actorMembership.Value.PermissionsMask, targetMembership.Value.Rank))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubMemberRemovalResult.ActorNotAllowed();
+            }
+
+            await DeleteClubMemberAsync(connection, transaction, clubId, memberCharacterId, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return ClubMemberRemovalResult.Removed();
         }
         catch
         {
@@ -251,13 +338,24 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
             return ClubRosterResult.ViewerNotMember();
         }
 
-        var members = await ListRosterMembersAsync(connection, clubId, includeOffline, cancellationToken);
+        var members = await ListRosterMembersAsync(connection, clubId, viewerCharacterId, includeOffline, cancellationToken);
         return ClubRosterResult.Found(new ClubRosterResponse(club, members, includeOffline));
     }
 
     private static bool CanInvite(EWuClubRank rank, int permissionsMask)
     {
         return rank == EWuClubRank.President || (permissionsMask & (int)EWuClubPermission.Invite) == (int)EWuClubPermission.Invite;
+    }
+
+    private static bool CanKick(EWuClubRank actorRank, int permissionsMask, EWuClubRank targetRank)
+    {
+        if (actorRank == EWuClubRank.President)
+        {
+            return targetRank != EWuClubRank.President;
+        }
+
+        return (permissionsMask & (int)EWuClubPermission.Kick) == (int)EWuClubPermission.Kick
+            && (int)actorRank > (int)targetRank;
     }
 
     private async Task EnsureClubSchemaAsync(CancellationToken cancellationToken)
@@ -753,6 +851,31 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
+    private static async Task<Guid?> FindCharacterIdByNameInRealmAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid realmId,
+        string characterName,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT id
+            FROM characters
+            WHERE realm_id = @realm_id
+              AND lower(name) = lower(@character_name)
+              AND deleted_at IS NULL
+            LIMIT 1;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("realm_id", NpgsqlDbType.Uuid, realmId);
+        command.Parameters.AddWithValue("character_name", NpgsqlDbType.Text, characterName.Trim());
+
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is Guid characterId ? characterId : null;
+    }
+
     private static async Task<ClubInviteSummary> InsertInviteAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -790,9 +913,30 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         return ReadClubInviteSummary(reader);
     }
 
+    private static async Task DeleteClubMemberAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid clubId,
+        Guid characterId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            DELETE FROM club_members
+            WHERE club_id = @club_id
+              AND character_id = @character_id;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("club_id", NpgsqlDbType.Uuid, clubId);
+        command.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static async Task<IReadOnlyList<ClubMemberSummary>> ListRosterMembersAsync(
         NpgsqlConnection connection,
         Guid clubId,
+        Guid viewerCharacterId,
         bool includeOffline,
         CancellationToken cancellationToken)
     {
@@ -803,7 +947,7 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
                    c.level,
                    cm.rank,
                    COALESCE(cp.path, '') AS path,
-                   COALESCE(cp.is_online, false) AS is_online,
+                   CASE WHEN cm.character_id = @viewer_character_id THEN true ELSE COALESCE(cp.is_online, false) END AS is_online,
                    cp.current_zone_id,
                    COALESCE(z.display_name, '') AS location_display_name,
                    cp.last_online_at,
@@ -816,12 +960,13 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
             LEFT JOIN zones z ON z.id = cp.current_zone_id
             WHERE cm.club_id = @club_id
               AND c.deleted_at IS NULL
-              AND (@include_offline OR COALESCE(cp.is_online, false))
-            ORDER BY COALESCE(cp.is_online, false) DESC, cm.rank DESC, c.name ASC;
+              AND (@include_offline OR COALESCE(cp.is_online, false) OR cm.character_id = @viewer_character_id)
+            ORDER BY CASE WHEN cm.character_id = @viewer_character_id THEN true ELSE COALESCE(cp.is_online, false) END DESC, cm.rank DESC, c.name ASC;
             """;
 
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("club_id", NpgsqlDbType.Uuid, clubId);
+        command.Parameters.AddWithValue("viewer_character_id", NpgsqlDbType.Uuid, viewerCharacterId);
         command.Parameters.AddWithValue("include_offline", NpgsqlDbType.Boolean, includeOffline);
 
         List<ClubMemberSummary> members = [];

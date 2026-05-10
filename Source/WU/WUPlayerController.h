@@ -23,11 +23,21 @@ class UWUClubCharterPromptWidget;
 class UWUExperienceBarWidget;
 class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
+class UWUSocialWidget;
 class UWUTargetFrameWidget;
 class UWUVendorWidget;
 class UWUWorldHoverTooltipWidget;
 class UWUZoneNameWidget;
 class AWUNpcCharacter;
+
+UENUM(BlueprintType)
+enum class EWUChatChannel : uint8
+{
+	Say,
+	General,
+	Club,
+	Officer
+};
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUTargetChangedSignature, AWUCharacter*, NewTarget);
 
@@ -165,6 +175,22 @@ protected:
 	/** Minimum time between chat messages from the same controller. */
 	UPROPERTY(EditAnywhere, Category = "UI|Chat", meta = (ClampMin = 0.0f, Units = "s"))
 	float ChatMessageCooldownSeconds = 0.25f;
+
+	/** Native social window used for club roster and social tabs. */
+	UPROPERTY(EditAnywhere, Category = "UI|Social")
+	TSubclassOf<UWUSocialWidget> SocialWidgetClass;
+
+	/** Pointer to the native social window. */
+	UPROPERTY()
+	TObjectPtr<UWUSocialWidget> SocialWidget;
+
+	/** Viewport position for the social window. */
+	UPROPERTY(EditAnywhere, Category = "UI|Social")
+	FVector2D SocialViewportPosition = FVector2D(24.0f, 128.0f);
+
+	/** Viewport size for the social window. */
+	UPROPERTY(EditAnywhere, Category = "UI|Social")
+	FVector2D SocialViewportSize = FVector2D(620.0f, 560.0f);
 
 	/** Native inventory shell widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
@@ -378,6 +404,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chat")
 	void SubmitChatMessage(const FString& RawMessage);
 
+	/** Toggles the social/club roster window. */
+	UFUNCTION(BlueprintCallable, Category = "Social")
+	void ToggleSocialPanel();
+
+	/** Shows the social/club roster window. */
+	UFUNCTION(BlueprintCallable, Category = "Social")
+	void ShowSocialPanel();
+
+	/** Hides the social/club roster window. */
+	UFUNCTION(BlueprintCallable, Category = "Social")
+	void HideSocialPanel();
+
 	/** Toggles the inventory shell window. */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void ToggleInventory();
@@ -500,6 +538,9 @@ protected:
 	/** Returns true while the club charter naming prompt is open. */
 	bool IsClubCharterPromptOpen() const;
 
+	/** Returns true while the social window is open. */
+	bool IsSocialPanelOpen() const;
+
 	/** Finds an interactable NPC under the cursor. */
 	AWUNpcCharacter* FindNpcUnderCursor() const;
 
@@ -530,6 +571,15 @@ protected:
 	/** Returns the display name used for outgoing chat. */
 	FString GetChatDisplayName() const;
 
+	/** Parses slash commands and prepares a channel-aware outgoing chat message. */
+	bool TryPrepareOutgoingChatMessage(const FString& RawMessage, FString& OutMessage, EWUChatChannel& OutChannel) const;
+
+	/** Returns the selected character's cached club summary, when present. */
+	bool TryGetSelectedCharacterClub(FWUClubSummary& OutClub) const;
+
+	/** Sends selected-character identity to the server-side chat router. */
+	void UpdateServerChatIdentityFromSession();
+
 	/** Applies the selected login character to this gameplay controller/pawn. */
 	void ApplySelectedCharacterSessionContext();
 
@@ -555,6 +605,27 @@ protected:
 	void HandleClubCreated(const FWUClubSummary& Club);
 
 	UFUNCTION()
+	void HandleClubInviteCreated(const FWUBackendClubInviteSummary& Invite);
+
+	UFUNCTION()
+	void HandleClubMemberRemoved(const FString& CharacterId);
+
+	UFUNCTION()
+	void HandleClubRosterLoaded(const TArray<FWUClubMemberSummary>& Members);
+
+	UFUNCTION()
+	void HandleSocialIncludeOfflineChanged(bool bIncludeOffline);
+
+	UFUNCTION()
+	void HandleSocialRefreshRequested();
+
+	UFUNCTION()
+	void HandleSocialInviteRequested(const FString& CharacterNameOrId);
+
+	UFUNCTION()
+	void HandleSocialKickRequested(const FString& CharacterId);
+
+	UFUNCTION()
 	void HandleSessionRequestFailed(const FString& ErrorMessage);
 
 	void ShowClubCharterPrompt(int32 SlotIndex, const FWUInventoryItem& Item);
@@ -578,7 +649,11 @@ protected:
 
 	/** Server-side player chat entry point. */
 	UFUNCTION(Server, Reliable)
-	void Server_SendChatMessage(const FString& Message);
+	void Server_SendChatMessage(const FString& Message, EWUChatChannel Channel, const FString& ClubId);
+
+	/** Server-side identity used by the prototype chat router. */
+	UFUNCTION(Server, Reliable)
+	void Server_UpdateChatIdentity(const FString& CharacterId, const FString& DisplayName, const FString& ClubId, EWUClubRank ClubRank);
 
 	/** Handles replicated target updates from server-authoritative systems */
 	UFUNCTION()
@@ -602,7 +677,12 @@ private:
 	FString AppliedSessionCharacterId;
 	FString AppliedSessionSpawnCharacterId;
 	FString AppliedInventoryCharacterId;
+	FString ServerChatCharacterId;
+	FString ServerChatDisplayName;
+	FString ServerChatClubId;
+	EWUClubRank ServerChatClubRank = EWUClubRank::None;
 	int32 PendingClubCharterSlotIndex = INDEX_NONE;
+	bool bSocialIncludeOffline = false;
 	FTimerHandle CharacterLocationSaveTimerHandle;
 
 };

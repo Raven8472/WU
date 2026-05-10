@@ -25,6 +25,7 @@
 #include "UI/WUExperienceBarWidget.h"
 #include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
+#include "UI/WUSocialWidget.h"
 #include "UI/WUTargetFrameWidget.h"
 #include "UI/WUVendorWidget.h"
 #include "UI/WUWorldHoverTooltipWidget.h"
@@ -78,6 +79,7 @@ AWUPlayerController::AWUPlayerController()
 	ExperienceBarWidgetClass = UWUExperienceBarWidget::StaticClass();
 	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
+	SocialWidgetClass = UWUSocialWidget::StaticClass();
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
 	VendorWidgetClass = UWUVendorWidget::StaticClass();
 	WorldHoverTooltipWidgetClass = UWUWorldHoverTooltipWidget::StaticClass();
@@ -175,6 +177,26 @@ void AWUPlayerController::BeginPlay()
 		{
 			ChatWidget->AddToPlayerScreen(7);
 			ApplyViewportUnitFrameSlot(ChatWidget, ChatViewportSize, ChatViewportPosition, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f));
+		}
+	}
+
+	if (!SocialWidgetClass)
+	{
+		SocialWidgetClass = UWUSocialWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && SocialWidgetClass)
+	{
+		SocialWidget = CreateWidget<UWUSocialWidget>(this, SocialWidgetClass);
+
+		if (SocialWidget)
+		{
+			SocialWidget->AddToPlayerScreen(9);
+			ApplyViewportUnitFrameSlot(SocialWidget, SocialViewportSize, SocialViewportPosition, FAnchors(0.0f, 0.0f), FVector2D(0.0f, 0.0f));
+			SocialWidget->OnIncludeOfflineChanged.AddDynamic(this, &AWUPlayerController::HandleSocialIncludeOfflineChanged);
+			SocialWidget->OnRefreshRequested.AddDynamic(this, &AWUPlayerController::HandleSocialRefreshRequested);
+			SocialWidget->OnInviteRequested.AddDynamic(this, &AWUPlayerController::HandleSocialInviteRequested);
+			SocialWidget->OnKickRequested.AddDynamic(this, &AWUPlayerController::HandleSocialKickRequested);
 		}
 	}
 
@@ -329,6 +351,9 @@ void AWUPlayerController::BeginPlay()
 				Session->OnInventorySnapshotLoaded.AddDynamic(this, &AWUPlayerController::HandleInventorySnapshotLoaded);
 				Session->OnCharacterUpdated.AddDynamic(this, &AWUPlayerController::HandleSessionCharacterUpdated);
 				Session->OnClubCreated.AddDynamic(this, &AWUPlayerController::HandleClubCreated);
+				Session->OnClubInviteCreated.AddDynamic(this, &AWUPlayerController::HandleClubInviteCreated);
+				Session->OnClubMemberRemoved.AddDynamic(this, &AWUPlayerController::HandleClubMemberRemoved);
+				Session->OnClubRosterLoaded.AddDynamic(this, &AWUPlayerController::HandleClubRosterLoaded);
 				Session->OnRequestFailed.AddDynamic(this, &AWUPlayerController::HandleSessionRequestFailed);
 			}
 		}
@@ -372,6 +397,9 @@ void AWUPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 				Session->OnInventorySnapshotLoaded.RemoveDynamic(this, &AWUPlayerController::HandleInventorySnapshotLoaded);
 				Session->OnCharacterUpdated.RemoveDynamic(this, &AWUPlayerController::HandleSessionCharacterUpdated);
 				Session->OnClubCreated.RemoveDynamic(this, &AWUPlayerController::HandleClubCreated);
+				Session->OnClubInviteCreated.RemoveDynamic(this, &AWUPlayerController::HandleClubInviteCreated);
+				Session->OnClubMemberRemoved.RemoveDynamic(this, &AWUPlayerController::HandleClubMemberRemoved);
+				Session->OnClubRosterLoaded.RemoveDynamic(this, &AWUPlayerController::HandleClubRosterLoaded);
 				Session->OnRequestFailed.RemoveDynamic(this, &AWUPlayerController::HandleSessionRequestFailed);
 			}
 		}
@@ -440,6 +468,7 @@ void AWUPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AWUPlayerController::CloseChatInput);
 	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
 	InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AWUPlayerController::ToggleInventory);
+	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &AWUPlayerController::ToggleSocialPanel);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &AWUPlayerController::ToggleCharacterPanel);
 	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AWUPlayerController::InteractWithNpc);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &AWUPlayerController::ToggleCharacterCreator);
@@ -762,6 +791,12 @@ void AWUPlayerController::CloseChatInput()
 		return;
 	}
 
+	if (IsSocialPanelOpen())
+	{
+		HideSocialPanel();
+		return;
+	}
+
 	if (IsCharacterPanelOpen())
 	{
 		HideCharacterPanel();
@@ -793,13 +828,114 @@ void AWUPlayerController::CloseChatInput()
 
 void AWUPlayerController::SubmitChatMessage(const FString& RawMessage)
 {
-	const FString SanitizedMessage = SanitizeChatMessage(RawMessage);
-	if (SanitizedMessage.IsEmpty())
+	FString PreparedMessage;
+	EWUChatChannel Channel = EWUChatChannel::Say;
+	if (!TryPrepareOutgoingChatMessage(RawMessage, PreparedMessage, Channel))
 	{
 		return;
 	}
 
-	Server_SendChatMessage(SanitizedMessage);
+	FWUClubSummary Club;
+	FString ClubId;
+	if (Channel == EWUChatChannel::Club || Channel == EWUChatChannel::Officer)
+	{
+		if (!TryGetSelectedCharacterClub(Club) || !Club.HasClub())
+		{
+			if (ChatWidget)
+			{
+				ChatWidget->AddChatMessage(NSLOCTEXT("WUPlayerController", "SystemChatSender", "System"), NSLOCTEXT("WUPlayerController", "NotInClubChat", "You are not in a club."));
+			}
+			return;
+		}
+
+		if (Channel == EWUChatChannel::Officer && Club.Rank != EWUClubRank::Officer && Club.Rank != EWUClubRank::President)
+		{
+			if (ChatWidget)
+			{
+				ChatWidget->AddChatMessage(NSLOCTEXT("WUPlayerController", "SystemChatSender", "System"), NSLOCTEXT("WUPlayerController", "OfficerChatUnavailable", "Officer chat requires officer or president rank."));
+			}
+			return;
+		}
+
+		ClubId = Club.ClubId;
+	}
+
+	Server_SendChatMessage(PreparedMessage, Channel, ClubId);
+}
+
+void AWUPlayerController::ToggleSocialPanel()
+{
+	if (!IsLocalPlayerController() || !SocialWidget || IsChatInputOpen() || IsCharacterCreatorOpen() || IsClubCharterPromptOpen())
+	{
+		return;
+	}
+
+	if (SocialWidget->IsSocialOpen())
+	{
+		HideSocialPanel();
+	}
+	else
+	{
+		ShowSocialPanel();
+	}
+}
+
+void AWUPlayerController::ShowSocialPanel()
+{
+	if (!IsLocalPlayerController() || !SocialWidget || IsChatInputOpen() || IsCharacterCreatorOpen() || IsClubCharterPromptOpen())
+	{
+		return;
+	}
+
+	if (InventoryWidget && InventoryWidget->IsInventoryOpen())
+	{
+		InventoryWidget->HideInventory();
+	}
+
+	if (CharacterPanelWidget && CharacterPanelWidget->IsPanelOpen())
+	{
+		CharacterPanelWidget->HidePanel();
+	}
+
+	if (VendorWidget && VendorWidget->IsVendorOpen())
+	{
+		VendorWidget->HideVendor();
+	}
+
+	FWUClubSummary Club;
+	TryGetSelectedCharacterClub(Club);
+	SocialWidget->ShowSocial(Club, bSocialIncludeOffline);
+
+	if (Club.HasClub())
+	{
+		if (UGameInstance* GameInstance = GetGameInstance())
+		{
+			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+			{
+				Session->LoadSelectedClubRoster(bSocialIncludeOffline);
+			}
+		}
+	}
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+}
+
+void AWUPlayerController::HideSocialPanel()
+{
+	if (!IsLocalPlayerController() || !SocialWidget)
+	{
+		return;
+	}
+
+	SocialWidget->HideSocial();
+	ApplyGameplayInputMode();
 }
 
 void AWUPlayerController::ToggleInventory()
@@ -812,6 +948,11 @@ void AWUPlayerController::ToggleInventory()
 	if (IsCharacterPanelOpen())
 	{
 		CharacterPanelWidget->HidePanel();
+	}
+
+	if (IsSocialPanelOpen())
+	{
+		SocialWidget->HideSocial();
 	}
 
 	if (IsVendorOpen())
@@ -848,6 +989,11 @@ void AWUPlayerController::ShowInventory()
 	if (IsCharacterPanelOpen())
 	{
 		CharacterPanelWidget->HidePanel();
+	}
+
+	if (IsSocialPanelOpen())
+	{
+		SocialWidget->HideSocial();
 	}
 
 	if (IsVendorOpen())
@@ -904,6 +1050,11 @@ void AWUPlayerController::ShowVendorForNpc(AWUNpcCharacter* NpcCharacter)
 		CharacterPanelWidget->HidePanel();
 	}
 
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->HideSocial();
+	}
+
 	if (CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen())
 	{
 		HideCharacterCreator();
@@ -952,6 +1103,11 @@ void AWUPlayerController::ToggleCharacterPanel()
 		VendorWidget->HideVendor();
 	}
 
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->HideSocial();
+	}
+
 	CharacterPanelWidget->TogglePanel();
 
 	if (CharacterPanelWidget->IsPanelOpen())
@@ -986,6 +1142,11 @@ void AWUPlayerController::ShowCharacterPanel()
 	if (VendorWidget && VendorWidget->IsVendorOpen())
 	{
 		VendorWidget->HideVendor();
+	}
+
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->HideSocial();
 	}
 
 	if (!CharacterPanelWidget->IsPanelOpen())
@@ -1056,6 +1217,11 @@ void AWUPlayerController::ShowCharacterCreator()
 	if (VendorWidget && VendorWidget->IsVendorOpen())
 	{
 		VendorWidget->HideVendor();
+	}
+
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->HideSocial();
 	}
 
 	SetIgnoreMoveInput(true);
@@ -1212,6 +1378,11 @@ bool AWUPlayerController::IsClubCharterPromptOpen() const
 	return ClubCharterPromptWidget && ClubCharterPromptWidget->IsPromptOpen();
 }
 
+bool AWUPlayerController::IsSocialPanelOpen() const
+{
+	return SocialWidget && SocialWidget->IsSocialOpen();
+}
+
 AWUCharacterCreatorPreviewActor* AWUPlayerController::EnsureCharacterCreatorPreviewActor()
 {
 	if (CharacterCreatorPreviewActor || !GetWorld() || !CharacterCreatorPreviewActorClass)
@@ -1297,6 +1468,11 @@ FString AWUPlayerController::SanitizeChatMessage(const FString& RawMessage) cons
 
 FString AWUPlayerController::GetChatDisplayName() const
 {
+	if (!ServerChatDisplayName.IsEmpty())
+	{
+		return ServerChatDisplayName;
+	}
+
 	if (const AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
 	{
 		const FString CharacterName = WUCharacter->GetDisplayName().ToString();
@@ -1316,6 +1492,103 @@ FString AWUPlayerController::GetChatDisplayName() const
 	}
 
 	return TEXT("Player");
+}
+
+bool AWUPlayerController::TryPrepareOutgoingChatMessage(const FString& RawMessage, FString& OutMessage, EWUChatChannel& OutChannel) const
+{
+	OutMessage = SanitizeChatMessage(RawMessage);
+	OutChannel = EWUChatChannel::Say;
+	if (OutMessage.IsEmpty())
+	{
+		return false;
+	}
+
+	auto TryConsumeCommand = [&OutMessage, &OutChannel](const TCHAR* CommandText, EWUChatChannel Channel) -> bool
+	{
+		const FString Command(CommandText);
+		if (OutMessage.Equals(Command, ESearchCase::IgnoreCase))
+		{
+			OutMessage.Empty();
+			OutChannel = Channel;
+			return true;
+		}
+
+		const FString CommandWithSpace = Command + TEXT(" ");
+		if (OutMessage.StartsWith(CommandWithSpace, ESearchCase::IgnoreCase))
+		{
+			OutMessage = OutMessage.Mid(CommandWithSpace.Len()).TrimStartAndEnd();
+			OutChannel = Channel;
+			return true;
+		}
+
+		return false;
+	};
+
+	TryConsumeCommand(TEXT("/c"), EWUChatChannel::Club)
+		|| TryConsumeCommand(TEXT("/club"), EWUChatChannel::Club)
+		|| TryConsumeCommand(TEXT("/o"), EWUChatChannel::Officer)
+		|| TryConsumeCommand(TEXT("/officer"), EWUChatChannel::Officer)
+		|| TryConsumeCommand(TEXT("/g"), EWUChatChannel::General)
+		|| TryConsumeCommand(TEXT("/general"), EWUChatChannel::General)
+		|| TryConsumeCommand(TEXT("/1"), EWUChatChannel::General)
+		|| TryConsumeCommand(TEXT("/s"), EWUChatChannel::Say)
+		|| TryConsumeCommand(TEXT("/say"), EWUChatChannel::Say);
+
+	return !OutMessage.IsEmpty();
+}
+
+bool AWUPlayerController::TryGetSelectedCharacterClub(FWUClubSummary& OutClub) const
+{
+	OutClub = FWUClubSummary();
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	const UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		return false;
+	}
+
+	const FString& SelectedCharacterId = Session->GetSelectedCharacterId();
+	for (const FWUBackendCharacterSummary& SessionCharacter : Session->GetCharacters())
+	{
+		if (SessionCharacter.CharacterId == SelectedCharacterId)
+		{
+			OutClub = SessionCharacter.Club;
+			return OutClub.HasClub();
+		}
+	}
+
+	return false;
+}
+
+void AWUPlayerController::UpdateServerChatIdentityFromSession()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	const UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		Server_UpdateChatIdentity(TEXT(""), GetChatDisplayName(), TEXT(""), EWUClubRank::None);
+		return;
+	}
+
+	const FString& SelectedCharacterId = Session->GetSelectedCharacterId();
+	for (const FWUBackendCharacterSummary& SessionCharacter : Session->GetCharacters())
+	{
+		if (SessionCharacter.CharacterId == SelectedCharacterId)
+		{
+			Server_UpdateChatIdentity(
+				SessionCharacter.CharacterId,
+				SessionCharacter.Name,
+				SessionCharacter.Club.ClubId,
+				SessionCharacter.Club.Rank);
+			return;
+		}
+	}
 }
 
 void AWUPlayerController::ApplySelectedCharacterSessionContext()
@@ -1392,6 +1665,8 @@ void AWUPlayerController::ApplySelectedCharacterSessionContext()
 			Session->RefreshSelectedInventorySnapshot();
 		}
 	}
+
+	UpdateServerChatIdentityFromSession();
 }
 
 void AWUPlayerController::SaveSelectedCharacterLocation()
@@ -1448,6 +1723,8 @@ void AWUPlayerController::HandleSessionCharacterUpdated(const FWUBackendCharacte
 		WUCharacter->ApplyCharacterProgressionState(UpdatedCharacter.Race, UpdatedCharacter.Level, UpdatedCharacter.Experience);
 		WUCharacter->SetDisplayName(FText::FromString(UpdatedCharacter.Name));
 	}
+
+	UpdateServerChatIdentityFromSession();
 }
 
 void AWUPlayerController::HandleInventoryItemUseRequested(int32 SlotIndex, FWUInventoryItem Item)
@@ -1513,7 +1790,132 @@ void AWUPlayerController::HandleClubCreated(const FWUClubSummary& Club)
 	}
 
 	PendingClubCharterSlotIndex = INDEX_NONE;
+	UpdateServerChatIdentityFromSession();
+
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->ShowSocial(Club, bSocialIncludeOffline);
+		if (UGameInstance* GameInstance = GetGameInstance())
+		{
+			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+			{
+				Session->LoadSelectedClubRoster(bSocialIncludeOffline);
+			}
+		}
+	}
+
 	ShowTargetingDebugMessage(FString::Printf(TEXT("Club created: %s"), *Club.Name), FColor::Green);
+}
+
+void AWUPlayerController::HandleClubInviteCreated(const FWUBackendClubInviteSummary& Invite)
+{
+	(void)Invite;
+
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->SetStatusText(NSLOCTEXT("WUPlayerController", "ClubInviteSent", "Club invite sent."));
+	}
+
+	ShowTargetingDebugMessage(TEXT("Club invite sent."), FColor::Green);
+}
+
+void AWUPlayerController::HandleClubMemberRemoved(const FString& CharacterId)
+{
+	(void)CharacterId;
+
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->SetStatusText(NSLOCTEXT("WUPlayerController", "ClubMemberRemoved", "Club member removed."));
+		HandleSocialRefreshRequested();
+	}
+
+	ShowTargetingDebugMessage(TEXT("Club member removed."), FColor::Green);
+}
+
+void AWUPlayerController::HandleClubRosterLoaded(const TArray<FWUClubMemberSummary>& Members)
+{
+	if (!IsLocalPlayerController() || !SocialWidget || !SocialWidget->IsSocialOpen())
+	{
+		return;
+	}
+
+	SocialWidget->SetClubRoster(Members, bSocialIncludeOffline);
+}
+
+void AWUPlayerController::HandleSocialIncludeOfflineChanged(bool bIncludeOffline)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	bSocialIncludeOffline = bIncludeOffline;
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+		{
+			Session->LoadSelectedClubRoster(bSocialIncludeOffline);
+		}
+	}
+}
+
+void AWUPlayerController::HandleSocialRefreshRequested()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+		{
+			Session->LoadSelectedClubRoster(bSocialIncludeOffline);
+		}
+	}
+}
+
+void AWUPlayerController::HandleSocialInviteRequested(const FString& CharacterNameOrId)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+		{
+			Session->InviteCharacterToSelectedClub(CharacterNameOrId);
+		}
+	}
+}
+
+void AWUPlayerController::HandleSocialKickRequested(const FString& CharacterId)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+		{
+			Session->KickCharacterFromSelectedClub(CharacterId);
+		}
+	}
 }
 
 void AWUPlayerController::HandleSessionRequestFailed(const FString& ErrorMessage)
@@ -1521,6 +1923,11 @@ void AWUPlayerController::HandleSessionRequestFailed(const FString& ErrorMessage
 	if (IsClubCharterPromptOpen() && ClubCharterPromptWidget)
 	{
 		ClubCharterPromptWidget->SetStatusText(FText::FromString(ErrorMessage));
+	}
+
+	if (SocialWidget && SocialWidget->IsSocialOpen())
+	{
+		SocialWidget->SetStatusText(FText::FromString(ErrorMessage));
 	}
 }
 
@@ -1645,7 +2052,7 @@ void AWUPlayerController::Server_ApplySelectedCharacterSpawnLocation_Implementat
 	ControlledPawn->ForceNetUpdate();
 }
 
-void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message)
+void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& Message, EWUChatChannel Channel, const FString& ClubId)
 {
 	if (!GetWorld())
 	{
@@ -1666,14 +2073,79 @@ void AWUPlayerController::Server_SendChatMessage_Implementation(const FString& M
 
 	LastChatMessageServerTime = Now;
 	const FString SenderName = GetChatDisplayName();
+	const FString SenderClubId = !ServerChatClubId.IsEmpty() ? ServerChatClubId : ClubId;
+	const FName SenderZoneId = Cast<AWUCharacter>(GetPawn()) ? Cast<AWUCharacter>(GetPawn())->GetCurrentZoneId() : NAME_None;
+
+	if ((Channel == EWUChatChannel::Club || Channel == EWUChatChannel::Officer) && SenderClubId.IsEmpty())
+	{
+		Client_ReceiveChatMessage(TEXT("System"), TEXT("You are not in a club."));
+		return;
+	}
+
+	if (Channel == EWUChatChannel::Officer
+		&& ServerChatClubRank != EWUClubRank::Officer
+		&& ServerChatClubRank != EWUClubRank::President)
+	{
+		Client_ReceiveChatMessage(TEXT("System"), TEXT("Officer chat requires officer or president rank."));
+		return;
+	}
+
+	const FString ChannelLabel = [&Channel]()
+	{
+		switch (Channel)
+		{
+		case EWUChatChannel::General:
+			return FString(TEXT("General"));
+		case EWUChatChannel::Club:
+			return FString(TEXT("Club"));
+		case EWUChatChannel::Officer:
+			return FString(TEXT("Officer"));
+		case EWUChatChannel::Say:
+		default:
+			return FString(TEXT("Say"));
+		}
+	}();
+	const FString RoutedSenderName = FString::Printf(TEXT("[%s] %s"), *ChannelLabel, *SenderName);
 
 	for (TActorIterator<AWUPlayerController> It(GetWorld()); It; ++It)
 	{
 		if (AWUPlayerController* Recipient = *It)
 		{
-			Recipient->Client_ReceiveChatMessage(SenderName, SanitizedMessage);
+			bool bShouldReceive = false;
+			if (Channel == EWUChatChannel::Club || Channel == EWUChatChannel::Officer)
+			{
+				bShouldReceive = !SenderClubId.IsEmpty() && Recipient->ServerChatClubId == SenderClubId;
+				if (Channel == EWUChatChannel::Officer)
+				{
+					bShouldReceive = bShouldReceive
+						&& (Recipient->ServerChatClubRank == EWUClubRank::Officer || Recipient->ServerChatClubRank == EWUClubRank::President);
+				}
+			}
+			else
+			{
+				const AWUCharacter* RecipientCharacter = Cast<AWUCharacter>(Recipient->GetPawn());
+				const FName RecipientZoneId = RecipientCharacter ? RecipientCharacter->GetCurrentZoneId() : NAME_None;
+				bShouldReceive = SenderZoneId.IsNone() || RecipientZoneId.IsNone() || RecipientZoneId == SenderZoneId;
+			}
+
+			if (bShouldReceive)
+			{
+				Recipient->Client_ReceiveChatMessage(RoutedSenderName, SanitizedMessage);
+			}
 		}
 	}
+}
+
+void AWUPlayerController::Server_UpdateChatIdentity_Implementation(const FString& CharacterId, const FString& DisplayName, const FString& ClubId, EWUClubRank ClubRank)
+{
+	ServerChatCharacterId = CharacterId.Left(64);
+	ServerChatDisplayName = SanitizeCharacterName(DisplayName);
+	if (ServerChatDisplayName.IsEmpty())
+	{
+		ServerChatDisplayName = DisplayName.Left(32).TrimStartAndEnd();
+	}
+	ServerChatClubId = ClubId.Left(64);
+	ServerChatClubRank = ClubRank;
 }
 
 void AWUPlayerController::Client_ReceiveChatMessage_Implementation(const FString& SenderName, const FString& Message)
@@ -1732,6 +2204,7 @@ bool AWUPlayerController::HasInteractiveOverlayOpen() const
 	return IsChatInputOpen()
 		|| IsInventoryOpen()
 		|| IsVendorOpen()
+		|| IsSocialPanelOpen()
 		|| IsCharacterPanelOpen()
 		|| IsCharacterCreatorOpen()
 		|| IsClubCharterPromptOpen();

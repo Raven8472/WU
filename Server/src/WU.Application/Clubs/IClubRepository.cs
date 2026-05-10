@@ -10,7 +10,14 @@ public interface IClubRepository
         string charterItemId,
         CancellationToken cancellationToken);
 
-    Task<ClubInviteResult> InviteAsync(Guid clubId, Guid inviterCharacterId, Guid invitedCharacterId, CancellationToken cancellationToken);
+    Task<ClubInviteResult> InviteAsync(
+        Guid clubId,
+        Guid inviterCharacterId,
+        Guid? invitedCharacterId,
+        string? invitedCharacterName,
+        CancellationToken cancellationToken);
+
+    Task<ClubMemberRemovalResult> RemoveMemberAsync(Guid clubId, Guid actorCharacterId, Guid memberCharacterId, CancellationToken cancellationToken);
 
     Task<ClubRosterResult> GetRosterAsync(Guid clubId, Guid viewerCharacterId, bool includeOffline, CancellationToken cancellationToken);
 }

@@ -229,6 +229,24 @@ app.MapPost("/api/clubs/{clubId:guid}/invites", async (Guid clubId, InviteClubMe
     };
 });
 
+app.MapDelete("/api/clubs/{clubId:guid}/members/{memberCharacterId:guid}", async (Guid clubId, Guid memberCharacterId, Guid actorCharacterId, ClubService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.RemoveMemberAsync(clubId, new RemoveClubMemberRequest(actorCharacterId, memberCharacterId), cancellationToken);
+
+    return result.Status switch
+    {
+        ClubMemberRemovalStatus.Removed => Results.NoContent(),
+        ClubMemberRemovalStatus.ClubNotFound => Results.NotFound(new { error = "club_not_found", message = "The club could not be found." }),
+        ClubMemberRemovalStatus.ActorNotMember => Results.StatusCode(StatusCodes.Status403Forbidden),
+        ClubMemberRemovalStatus.ActorNotAllowed => Results.StatusCode(StatusCodes.Status403Forbidden),
+        ClubMemberRemovalStatus.MemberNotFound => Results.NotFound(new { error = "club_member_not_found", message = "That character is not a member of this club." }),
+        ClubMemberRemovalStatus.CannotRemoveSelf => Results.Conflict(new { error = "cannot_remove_self", message = "A character cannot kick itself from the club." }),
+        ClubMemberRemovalStatus.CannotRemovePresident => Results.Conflict(new { error = "cannot_remove_president", message = "The club president cannot be kicked." }),
+        ClubMemberRemovalStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_member_removal_request", messages = result.Errors }),
+        _ => Results.Problem("The club member could not be removed.")
+    };
+});
+
 app.MapGet("/api/clubs/{clubId:guid}/roster", async (Guid clubId, Guid viewerCharacterId, bool includeOffline, ClubService service, CancellationToken cancellationToken) =>
 {
     var result = await service.GetRosterAsync(clubId, viewerCharacterId, includeOffline, cancellationToken);
