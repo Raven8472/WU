@@ -828,9 +828,63 @@ void AWUPlayerController::CloseChatInput()
 
 void AWUPlayerController::SubmitChatMessage(const FString& RawMessage)
 {
+	const FString SanitizedCommand = SanitizeChatMessage(RawMessage);
+	if (SanitizedCommand.IsEmpty())
+	{
+		return;
+	}
+
+	auto TryConsumePayloadCommand = [&SanitizedCommand](const TCHAR* CommandText, FString& OutPayload) -> bool
+	{
+		const FString Command(CommandText);
+		if (SanitizedCommand.Equals(Command, ESearchCase::IgnoreCase))
+		{
+			OutPayload.Empty();
+			return true;
+		}
+
+		const FString CommandWithSpace = Command + TEXT(" ");
+		if (SanitizedCommand.StartsWith(CommandWithSpace, ESearchCase::IgnoreCase))
+		{
+			OutPayload = SanitizedCommand.Mid(CommandWithSpace.Len()).TrimStartAndEnd();
+			return true;
+		}
+
+		return false;
+	};
+
+	FString InviteTarget;
+	if (TryConsumePayloadCommand(TEXT("/cinvite"), InviteTarget)
+		|| TryConsumePayloadCommand(TEXT("/clubinvite"), InviteTarget))
+	{
+		if (InviteTarget.IsEmpty())
+		{
+			if (ChatWidget)
+			{
+				ChatWidget->AddChatMessage(NSLOCTEXT("WUPlayerController", "SystemChatSender", "System"), NSLOCTEXT("WUPlayerController", "ClubInviteUsage", "Usage: /cinvite character-name"));
+			}
+			return;
+		}
+
+		if (UGameInstance* GameInstance = GetGameInstance())
+		{
+			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
+			{
+				Session->InviteCharacterToSelectedClub(InviteTarget);
+				if (ChatWidget)
+				{
+					ChatWidget->AddChatMessage(
+						NSLOCTEXT("WUPlayerController", "SystemChatSender", "System"),
+						FText::Format(NSLOCTEXT("WUPlayerController", "ClubInviteSending", "Sending club invite to {0}..."), FText::FromString(InviteTarget)));
+				}
+			}
+		}
+		return;
+	}
+
 	FString PreparedMessage;
 	EWUChatChannel Channel = EWUChatChannel::Say;
-	if (!TryPrepareOutgoingChatMessage(RawMessage, PreparedMessage, Channel))
+	if (!TryPrepareOutgoingChatMessage(SanitizedCommand, PreparedMessage, Channel))
 	{
 		return;
 	}

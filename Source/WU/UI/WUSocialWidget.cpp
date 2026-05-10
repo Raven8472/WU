@@ -616,10 +616,6 @@ TSharedRef<SWidget> UWUSocialWidget::CreateRosterRow(const FWUClubMemberSummary&
 
 TSharedRef<SWidget> UWUSocialWidget::CreateFooterActions()
 {
-	const bool bCanInvite = Club.HasPermission(EWUClubPermission::Invite) || Club.Rank == EWUClubRank::President;
-	const bool bCanKick = Club.HasPermission(EWUClubPermission::Kick) || Club.Rank == EWUClubRank::President;
-	const bool bCanManage = Club.HasPermission(EWUClubPermission::ManagePreferences) || Club.Rank == EWUClubRank::President;
-
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot()
 		.AutoHeight()
@@ -639,21 +635,21 @@ TSharedRef<SWidget> UWUSocialWidget::CreateFooterActions()
 			.AutoWidth()
 			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
 			[
-				SNew(SButton)
-				.Text(LOCTEXT("InviteButton", "Invite"))
-				.IsEnabled(bCanInvite)
-				.OnClicked_UObject(this, &UWUSocialWidget::HandleInviteClicked)
-			]
+			SNew(SButton)
+			.Text(LOCTEXT("InviteButton", "Invite"))
+			.IsEnabled_Lambda([this]() { return CanInviteMembers(); })
+			.OnClicked_UObject(this, &UWUSocialWidget::HandleInviteClicked)
+		]
 
 			+ SHorizontalBox::Slot()
 			.AutoWidth()
 			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
 			[
-				SNew(SButton)
-				.Text(LOCTEXT("KickSelectedButton", "Kick Selected"))
-				.IsEnabled(bCanKick)
-				.OnClicked_UObject(this, &UWUSocialWidget::HandleKickSelectedClicked)
-			]
+			SNew(SButton)
+			.Text(LOCTEXT("KickSelectedButton", "Kick Selected"))
+			.IsEnabled_Lambda([this]() { return CanKickMembers(); })
+			.OnClicked_UObject(this, &UWUSocialWidget::HandleKickSelectedClicked)
+		]
 		]
 
 		+ SVerticalBox::Slot()
@@ -676,10 +672,28 @@ TSharedRef<SWidget> UWUSocialWidget::CreateFooterActions()
 			[
 				SNew(SButton)
 				.Text(LOCTEXT("ClubControlButton", "Club Control"))
-				.IsEnabled(bCanManage)
+				.IsEnabled_Lambda([this]() { return CanManageClub(); })
 				.OnClicked_UObject(this, &UWUSocialWidget::HandleDisabledActionClicked)
 			]
 		];
+}
+
+bool UWUSocialWidget::CanInviteMembers() const
+{
+	return Club.HasClub()
+		&& (Club.Rank == EWUClubRank::President || Club.HasPermission(EWUClubPermission::Invite));
+}
+
+bool UWUSocialWidget::CanKickMembers() const
+{
+	return Club.HasClub()
+		&& (Club.Rank == EWUClubRank::President || Club.HasPermission(EWUClubPermission::Kick));
+}
+
+bool UWUSocialWidget::CanManageClub() const
+{
+	return Club.HasClub()
+		&& (Club.Rank == EWUClubRank::President || Club.HasPermission(EWUClubPermission::ManagePreferences));
 }
 
 bool UWUSocialWidget::MemberMatchesSearch(const FWUClubMemberSummary& Member) const

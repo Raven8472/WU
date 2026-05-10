@@ -100,6 +100,9 @@ private:
 	TSharedRef<SWidget> CreateRosterHeader() const;
 	TSharedRef<SWidget> CreateRosterRow(const FWUClubMemberSummary& Member) const;
 	TSharedRef<SWidget> CreateFooterActions();
+	bool CanInviteMembers() const;
+	bool CanKickMembers() const;
+	bool CanManageClub() const;
 	bool MemberMatchesSearch(const FWUClubMemberSummary& Member) const;
 	FText GetMemberZoneText(const FWUClubMemberSummary& Member) const;
 	FText GetMemberPathText(const FWUClubMemberSummary& Member) const;
