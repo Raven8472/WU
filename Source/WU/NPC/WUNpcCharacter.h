@@ -13,7 +13,9 @@ class UMaterialInterface;
 class USkeletalMesh;
 class USkeletalMeshComponent;
 class UTexture2D;
+class UWidgetComponent;
 class UWUNpcDefinition;
+class UWUOverheadNameWidget;
 
 UCLASS(Blueprintable)
 class WU_API AWUNpcCharacter : public ACharacter
@@ -46,6 +48,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "NPC")
 	FText GetInteractionPrompt() const;
+
+	UFUNCTION(BlueprintPure, Category = "NPC")
+	FText GetVendorTypeLabel() const;
 
 	UFUNCTION(BlueprintPure, Category = "NPC")
 	bool CanOfferQuest() const;
@@ -99,9 +104,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Appearance")
 	TObjectPtr<USkeletalMeshComponent> BootsOutfitMeshComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|UI")
+	TObjectPtr<UWidgetComponent> OverheadNameComponent;
+
 private:
 
 	void UpdateNpcAppearance();
+	void RefreshOverheadName();
+	UWUOverheadNameWidget* GetOverheadNameWidget() const;
 	void ConfigureBodyMeshComponent() const;
 	void ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const;
 	void SetModularMesh(USkeletalMeshComponent* MeshComponent, const TCHAR* AssetPath) const;

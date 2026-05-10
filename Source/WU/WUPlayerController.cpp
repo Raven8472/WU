@@ -21,11 +21,13 @@
 #include "UI/WUCharacterCreatorWidget.h"
 #include "UI/WUCharacterPanelWidget.h"
 #include "UI/WUChatWidget.h"
+#include "UI/WUClubCharterPromptWidget.h"
 #include "UI/WUExperienceBarWidget.h"
 #include "UI/WUInventoryWidget.h"
 #include "UI/WUPlayerFrameWidget.h"
 #include "UI/WUTargetFrameWidget.h"
 #include "UI/WUVendorWidget.h"
+#include "UI/WUWorldHoverTooltipWidget.h"
 #include "UI/WUZoneNameWidget.h"
 #include "WU.h"
 #include "GameFramework/PlayerState.h"
@@ -34,6 +36,10 @@
 
 namespace
 {
+	const FLinearColor FriendlyEmeraldNameColor(0.0f, 0.84f, 0.38f, 1.0f);
+	const FLinearColor NeutralEnemyNameColor(1.0f, 0.86f, 0.20f, 1.0f);
+	const FLinearColor HostileEnemyNameColor(1.0f, 0.18f, 0.12f, 1.0f);
+
 	void ApplyViewportUnitFrameSlot(UUserWidget* Widget, const FVector2D& Size, const FVector2D& Position, const FAnchors& Anchors, const FVector2D& Alignment)
 	{
 		if (!Widget)
@@ -46,6 +52,20 @@ namespace
 		Widget->SetAnchorsInViewport(Anchors);
 		Widget->SetAlignmentInViewport(Alignment);
 	}
+
+	FSlateColor GetNpcDispositionSlateColor(EWUNpcDisposition Disposition)
+	{
+		switch (Disposition)
+		{
+		case EWUNpcDisposition::NeutralEnemy:
+			return FSlateColor(NeutralEnemyNameColor);
+		case EWUNpcDisposition::HostileEnemy:
+			return FSlateColor(HostileEnemyNameColor);
+		case EWUNpcDisposition::Friendly:
+		default:
+			return FSlateColor(FriendlyEmeraldNameColor);
+		}
+	}
 }
 
 AWUPlayerController::AWUPlayerController()
@@ -54,11 +74,13 @@ AWUPlayerController::AWUPlayerController()
 	CharacterCreatorPreviewActorClass = AWUCharacterCreatorPreviewActor::StaticClass();
 	CharacterPanelWidgetClass = UWUCharacterPanelWidget::StaticClass();
 	ChatWidgetClass = UWUChatWidget::StaticClass();
+	ClubCharterPromptWidgetClass = UWUClubCharterPromptWidget::StaticClass();
 	ExperienceBarWidgetClass = UWUExperienceBarWidget::StaticClass();
 	InventoryWidgetClass = UWUInventoryWidget::StaticClass();
 	PlayerFrameWidgetClass = UWUPlayerFrameWidget::StaticClass();
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
 	VendorWidgetClass = UWUVendorWidget::StaticClass();
+	WorldHoverTooltipWidgetClass = UWUWorldHoverTooltipWidget::StaticClass();
 	ZoneNameWidgetClass = UWUZoneNameWidget::StaticClass();
 }
 
@@ -169,6 +191,7 @@ void AWUPlayerController::BeginPlay()
 		{
 			InventoryWidget->AddToPlayerScreen(8);
 			ApplyViewportUnitFrameSlot(InventoryWidget, InventoryWidget->GetDesiredInventoryPanelSize(), InventoryViewportPosition, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f));
+			InventoryWidget->OnItemUseRequested.AddDynamic(this, &AWUPlayerController::HandleInventoryItemUseRequested);
 		}
 	}
 
@@ -201,6 +224,25 @@ void AWUPlayerController::BeginPlay()
 		{
 			CharacterPanelWidget->AddToPlayerScreen(9);
 			ApplyViewportUnitFrameSlot(CharacterPanelWidget, CharacterPanelViewportSize, CharacterPanelViewportPosition, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f));
+		}
+	}
+
+	if (!ClubCharterPromptWidgetClass)
+	{
+		ClubCharterPromptWidgetClass = UWUClubCharterPromptWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && ClubCharterPromptWidgetClass)
+	{
+		ClubCharterPromptWidget = CreateWidget<UWUClubCharterPromptWidget>(this, ClubCharterPromptWidgetClass);
+
+		if (ClubCharterPromptWidget)
+		{
+			ClubCharterPromptWidget->AddToPlayerScreen(12);
+			ApplyViewportUnitFrameSlot(ClubCharterPromptWidget, ClubCharterPromptViewportSize, ClubCharterPromptViewportPosition, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 0.5f));
+			ClubCharterPromptWidget->OnClubNameSubmitted.AddDynamic(this, &AWUPlayerController::HandleClubCharterSubmitted);
+			ClubCharterPromptWidget->OnPromptCancelled.AddDynamic(this, &AWUPlayerController::HandleClubCharterPromptCancelled);
+			ClubCharterPromptWidget->HidePrompt();
 		}
 	}
 
@@ -242,6 +284,23 @@ void AWUPlayerController::BeginPlay()
 		}
 	}
 
+	if (!WorldHoverTooltipWidgetClass)
+	{
+		WorldHoverTooltipWidgetClass = UWUWorldHoverTooltipWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && WorldHoverTooltipWidgetClass)
+	{
+		WorldHoverTooltipWidget = CreateWidget<UWUWorldHoverTooltipWidget>(this, WorldHoverTooltipWidgetClass);
+
+		if (WorldHoverTooltipWidget)
+		{
+			WorldHoverTooltipWidget->AddToPlayerScreen(7);
+			ApplyViewportUnitFrameSlot(WorldHoverTooltipWidget, WorldHoverTooltipViewportSize, WorldHoverTooltipViewportPosition, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f));
+			WorldHoverTooltipWidget->HideTooltip();
+		}
+	}
+
 	// only spawn touch controls on local player controllers
 	if (ShouldUseTouchControls() && IsLocalPlayerController())
 	{
@@ -268,6 +327,9 @@ void AWUPlayerController::BeginPlay()
 			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
 			{
 				Session->OnInventorySnapshotLoaded.AddDynamic(this, &AWUPlayerController::HandleInventorySnapshotLoaded);
+				Session->OnCharacterUpdated.AddDynamic(this, &AWUPlayerController::HandleSessionCharacterUpdated);
+				Session->OnClubCreated.AddDynamic(this, &AWUPlayerController::HandleClubCreated);
+				Session->OnRequestFailed.AddDynamic(this, &AWUPlayerController::HandleSessionRequestFailed);
 			}
 		}
 
@@ -287,6 +349,16 @@ void AWUPlayerController::BeginPlay()
 	}
 }
 
+void AWUPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+
+	if (IsLocalPlayerController())
+	{
+		UpdateWorldHoverTooltip();
+	}
+}
+
 void AWUPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (IsLocalPlayerController())
@@ -298,6 +370,9 @@ void AWUPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			if (UWUClientSessionSubsystem* Session = GameInstance->GetSubsystem<UWUClientSessionSubsystem>())
 			{
 				Session->OnInventorySnapshotLoaded.RemoveDynamic(this, &AWUPlayerController::HandleInventorySnapshotLoaded);
+				Session->OnCharacterUpdated.RemoveDynamic(this, &AWUPlayerController::HandleSessionCharacterUpdated);
+				Session->OnClubCreated.RemoveDynamic(this, &AWUPlayerController::HandleClubCreated);
+				Session->OnRequestFailed.RemoveDynamic(this, &AWUPlayerController::HandleSessionRequestFailed);
 			}
 		}
 
@@ -350,20 +425,10 @@ void AWUPlayerController::SetupInputComponent()
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
 	{
-		if (ClickTargetAction)
-		{
-			EnhancedInputComponent->BindAction(ClickTargetAction, ETriggerEvent::Started, this, &AWUPlayerController::HandlePrimaryWorldClick);
-		}
-
 		if (TabTargetAction)
 		{
 			EnhancedInputComponent->BindAction(TabTargetAction, ETriggerEvent::Started, this, &AWUPlayerController::TargetNextCharacter);
 		}
-	}
-
-	if (!ClickTargetAction)
-	{
-		InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AWUPlayerController::HandlePrimaryWorldClick);
 	}
 
 	if (!TabTargetAction)
@@ -685,6 +750,12 @@ void AWUPlayerController::CloseChatInput()
 		return;
 	}
 
+	if (IsClubCharterPromptOpen())
+	{
+		HideClubCharterPrompt();
+		return;
+	}
+
 	if (IsInventoryOpen())
 	{
 		HideInventory();
@@ -733,7 +804,7 @@ void AWUPlayerController::SubmitChatMessage(const FString& RawMessage)
 
 void AWUPlayerController::ToggleInventory()
 {
-	if (!IsLocalPlayerController() || !InventoryWidget || IsChatInputOpen() || IsCharacterCreatorOpen())
+	if (!IsLocalPlayerController() || !InventoryWidget || IsChatInputOpen() || IsCharacterCreatorOpen() || IsClubCharterPromptOpen())
 	{
 		return;
 	}
@@ -817,16 +888,9 @@ void AWUPlayerController::ShowVendorForNpc(AWUNpcCharacter* NpcCharacter)
 		return;
 	}
 
-	if (!NpcCharacter->CanOpenVendor())
+	if (!NpcCharacter->CanOpenVendor() && !NpcCharacter->CanOfferQuest())
 	{
-		if (NpcCharacter->CanOfferQuest())
-		{
-			ShowTargetingDebugMessage(TEXT("Quest interaction not wired yet"), FColor::Yellow);
-		}
-		else
-		{
-			ShowTargetingDebugMessage(NpcCharacter->GetInteractionPrompt().ToString(), FColor::Yellow);
-		}
+		ShowTargetingDebugMessage(NpcCharacter->GetInteractionPrompt().ToString(), FColor::Yellow);
 		return;
 	}
 
@@ -846,7 +910,7 @@ void AWUPlayerController::ShowVendorForNpc(AWUNpcCharacter* NpcCharacter)
 	}
 
 	const FWUNpcProfile Profile = NpcCharacter->GetNpcProfile();
-	VendorWidget->ShowVendor(Profile.VendorTableId, NpcCharacter->GetNpcDisplayName(), NpcCharacter->GetInteractionPrompt());
+	VendorWidget->ShowVendor(Profile, NpcCharacter->GetNpcDisplayName(), NpcCharacter->GetInteractionPrompt());
 
 	bShowMouseCursor = true;
 	bEnableClickEvents = true;
@@ -1088,7 +1152,19 @@ void AWUPlayerController::RequestSelectedCharacterExperience(int32 Amount, EWUEx
 
 void AWUPlayerController::GrantExplorationExperience(int32 Amount)
 {
-	RequestSelectedCharacterExperience(Amount, EWUExperienceSource::Exploration);
+	if (Amount <= 0)
+	{
+		return;
+	}
+
+	const AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn());
+	const FName ZoneId = WUCharacter ? WUCharacter->GetCurrentZoneId() : NAME_None;
+	if (ZoneId.IsNone())
+	{
+		return;
+	}
+
+	Server_RequestZoneExplorationExperience(Amount, ZoneId);
 }
 
 void AWUPlayerController::GrantQuestTurnInExperience(int32 Amount)
@@ -1096,13 +1172,13 @@ void AWUPlayerController::GrantQuestTurnInExperience(int32 Amount)
 	RequestSelectedCharacterExperience(Amount, EWUExperienceSource::QuestTurnIn);
 }
 
-void AWUPlayerController::Client_HandleExperienceAward_Implementation(int32 Amount, EWUExperienceSource Source)
+void AWUPlayerController::Client_HandleExperienceAward_Implementation(int32 Amount, EWUExperienceSource Source, const FString& SourceKey)
 {
 	UGameInstance* GameInstance = GetGameInstance();
 	UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
 	if (Session)
 	{
-		Session->AwardSelectedCharacterExperience(Amount, Source);
+		Session->AwardSelectedCharacterExperience(Amount, Source, SourceKey);
 	}
 }
 
@@ -1129,6 +1205,11 @@ bool AWUPlayerController::IsCharacterPanelOpen() const
 bool AWUPlayerController::IsCharacterCreatorOpen() const
 {
 	return CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen();
+}
+
+bool AWUPlayerController::IsClubCharterPromptOpen() const
+{
+	return ClubCharterPromptWidget && ClubCharterPromptWidget->IsPromptOpen();
 }
 
 AWUCharacterCreatorPreviewActor* AWUPlayerController::EnsureCharacterCreatorPreviewActor()
@@ -1348,6 +1429,156 @@ void AWUPlayerController::HandleInventorySnapshotLoaded(const FWUBackendInventor
 	ApplyInventorySnapshotToCurrentPawn(Snapshot);
 }
 
+void AWUPlayerController::HandleSessionCharacterUpdated(const FWUBackendCharacterSummary& UpdatedCharacter)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	const UGameInstance* GameInstance = GetGameInstance();
+	const UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || UpdatedCharacter.CharacterId != Session->GetSelectedCharacterId())
+	{
+		return;
+	}
+
+	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
+	{
+		WUCharacter->ApplyCharacterProgressionState(UpdatedCharacter.Race, UpdatedCharacter.Level, UpdatedCharacter.Experience);
+		WUCharacter->SetDisplayName(FText::FromString(UpdatedCharacter.Name));
+	}
+}
+
+void AWUPlayerController::HandleInventoryItemUseRequested(int32 SlotIndex, FWUInventoryItem Item)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (Item.UseType == EWUItemUseType::ClubCharter)
+	{
+		ShowClubCharterPrompt(SlotIndex, Item);
+		return;
+	}
+
+	ShowTargetingDebugMessage(TEXT("That item cannot be used yet."), FColor::Yellow);
+}
+
+void AWUPlayerController::HandleClubCharterSubmitted(const FString& ClubName, int32 SlotIndex, FWUInventoryItem Item)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	UWUClientSessionSubsystem* Session = GameInstance ? GameInstance->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session)
+	{
+		if (ClubCharterPromptWidget)
+		{
+			ClubCharterPromptWidget->SetStatusText(NSLOCTEXT("WUPlayerController", "ClubCharterSessionUnavailable", "Backend session is not available."));
+		}
+		return;
+	}
+
+	PendingClubCharterSlotIndex = SlotIndex;
+	Session->CreateClubFromSelectedCharter(ClubName, SlotIndex, Item.ItemId.ToString());
+}
+
+void AWUPlayerController::HandleClubCharterPromptCancelled()
+{
+	PendingClubCharterSlotIndex = INDEX_NONE;
+	RestoreInputAfterModalPrompt();
+}
+
+void AWUPlayerController::HandleClubCreated(const FWUClubSummary& Club)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	const int32 ConsumedSlotIndex = PendingClubCharterSlotIndex;
+	HideClubCharterPrompt();
+
+	if (ConsumedSlotIndex != INDEX_NONE)
+	{
+		if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
+		{
+			WUCharacter->RemoveInventoryItemAtSlot(ConsumedSlotIndex);
+		}
+	}
+
+	PendingClubCharterSlotIndex = INDEX_NONE;
+	ShowTargetingDebugMessage(FString::Printf(TEXT("Club created: %s"), *Club.Name), FColor::Green);
+}
+
+void AWUPlayerController::HandleSessionRequestFailed(const FString& ErrorMessage)
+{
+	if (IsClubCharterPromptOpen() && ClubCharterPromptWidget)
+	{
+		ClubCharterPromptWidget->SetStatusText(FText::FromString(ErrorMessage));
+	}
+}
+
+void AWUPlayerController::ShowClubCharterPrompt(int32 SlotIndex, const FWUInventoryItem& Item)
+{
+	if (!IsLocalPlayerController() || !ClubCharterPromptWidget)
+	{
+		return;
+	}
+
+	PendingClubCharterSlotIndex = INDEX_NONE;
+	ClubCharterPromptWidget->ShowPrompt(SlotIndex, Item);
+
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+}
+
+void AWUPlayerController::HideClubCharterPrompt()
+{
+	if (!ClubCharterPromptWidget || !ClubCharterPromptWidget->IsPromptOpen())
+	{
+		PendingClubCharterSlotIndex = INDEX_NONE;
+		return;
+	}
+
+	ClubCharterPromptWidget->HidePrompt();
+	PendingClubCharterSlotIndex = INDEX_NONE;
+	RestoreInputAfterModalPrompt();
+}
+
+void AWUPlayerController::RestoreInputAfterModalPrompt()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	SetIgnoreMoveInput(false);
+	SetIgnoreLookInput(false);
+
+	if (HasInteractiveOverlayOpen())
+	{
+		ApplyUIInputMode();
+	}
+	else
+	{
+		ApplyGameplayInputMode();
+	}
+}
+
 bool AWUPlayerController::ApplyInventorySnapshotToCurrentPawn(const FWUBackendInventorySnapshot& Snapshot)
 {
 	AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn());
@@ -1381,6 +1612,19 @@ void AWUPlayerController::Server_RequestSelectedCharacterExperience_Implementati
 	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
 	{
 		WUCharacter->AwardExperience(Amount, Source);
+	}
+}
+
+void AWUPlayerController::Server_RequestZoneExplorationExperience_Implementation(int32 Amount, FName ZoneId)
+{
+	if (Amount <= 0 || ZoneId.IsNone())
+	{
+		return;
+	}
+
+	if (AWUCharacter* WUCharacter = Cast<AWUCharacter>(GetPawn()))
+	{
+		WUCharacter->AwardExplorationExperience(Amount, ZoneId);
 	}
 }
 
@@ -1489,7 +1733,8 @@ bool AWUPlayerController::HasInteractiveOverlayOpen() const
 		|| IsInventoryOpen()
 		|| IsVendorOpen()
 		|| IsCharacterPanelOpen()
-		|| IsCharacterCreatorOpen();
+		|| IsCharacterCreatorOpen()
+		|| IsClubCharterPromptOpen();
 }
 
 AWUNpcCharacter* AWUPlayerController::FindNpcUnderCursor() const
@@ -1607,6 +1852,114 @@ bool AWUPlayerController::IsNpcInInteractionRange(const AWUNpcCharacter* NpcChar
 	}
 
 	return FVector::DistSquared(ControlledPawn->GetActorLocation(), NpcCharacter->GetActorLocation()) <= FMath::Square(NpcInteractionDistance);
+}
+
+void AWUPlayerController::UpdateWorldHoverTooltip()
+{
+	if (!WorldHoverTooltipWidget)
+	{
+		return;
+	}
+
+	if (HasInteractiveOverlayOpen())
+	{
+		WorldHoverTooltipWidget->HideTooltip();
+		return;
+	}
+
+	AActor* HoverActor = FindWorldHoverActorUnderCursor();
+	if (!HoverActor)
+	{
+		WorldHoverTooltipWidget->HideTooltip();
+		return;
+	}
+
+	if (const AWUNpcCharacter* NpcCharacter = Cast<AWUNpcCharacter>(HoverActor))
+	{
+		const FWUNpcProfile Profile = NpcCharacter->GetNpcProfile();
+		WorldHoverTooltipWidget->ShowTooltip(
+			NpcCharacter->GetNpcDisplayName(),
+			NpcCharacter->GetVendorTypeLabel(),
+			GetNpcDispositionSlateColor(Profile.Disposition));
+		return;
+	}
+
+	if (const AWUCharacter* WUCharacter = Cast<AWUCharacter>(HoverActor))
+	{
+		WorldHoverTooltipWidget->ShowTooltip(
+			WUCharacter->GetDisplayName(),
+			FText::FromString(WUCharacterCreation::RaceToString(WUCharacter->GetBloodStatus())),
+			FSlateColor(FriendlyEmeraldNameColor));
+		return;
+	}
+
+	WorldHoverTooltipWidget->HideTooltip();
+}
+
+AActor* AWUPlayerController::FindWorldHoverActorUnderCursor() const
+{
+	if (!IsLocalPlayerController() || !GetWorld())
+	{
+		return nullptr;
+	}
+
+	FVector WorldLocation;
+	FVector WorldDirection;
+	if (!DeprojectMousePositionToWorld(WorldLocation, WorldDirection))
+	{
+		return nullptr;
+	}
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WUWorldHoverUnderCursor), true);
+	QueryParams.AddIgnoredActor(GetPawn());
+
+	const FVector TraceEnd = WorldLocation + (WorldDirection * TargetTraceDistance);
+	auto ResolveHoverActor = [](AActor* Candidate) -> AActor*
+	{
+		if (Cast<AWUNpcCharacter>(Candidate) || Cast<AWUCharacter>(Candidate))
+		{
+			return Candidate;
+		}
+
+		return nullptr;
+	};
+
+	TArray<FHitResult> VisibilityHits;
+	GetWorld()->LineTraceMultiByChannel(
+		VisibilityHits,
+		WorldLocation,
+		TraceEnd,
+		ECC_Visibility,
+		QueryParams);
+
+	for (const FHitResult& Hit : VisibilityHits)
+	{
+		if (AActor* HoverActor = ResolveHoverActor(Hit.GetActor()))
+		{
+			return HoverActor;
+		}
+	}
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	TArray<FHitResult> PawnHits;
+	GetWorld()->LineTraceMultiByObjectType(
+		PawnHits,
+		WorldLocation,
+		TraceEnd,
+		ObjectParams,
+		QueryParams);
+
+	for (const FHitResult& Hit : PawnHits)
+	{
+		if (AActor* HoverActor = ResolveHoverActor(Hit.GetActor()))
+		{
+			return HoverActor;
+		}
+	}
+
+	return nullptr;
 }
 
 bool AWUPlayerController::IsSelectableTarget(const AWUCharacter* Candidate) const

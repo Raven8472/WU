@@ -1,3 +1,5 @@
+using WU.Domain.Characters;
+
 namespace WU.Application.Characters;
 
 public interface ICharacterRepository
@@ -10,5 +12,12 @@ public interface ICharacterRepository
 
     Task<CharacterSummary?> UpdateLocationAsync(Guid accountId, Guid realmId, Guid characterId, CharacterLocation location, CancellationToken cancellationToken);
 
-    Task<CharacterSummary?> AwardExperienceAsync(Guid accountId, Guid realmId, Guid characterId, int amount, CancellationToken cancellationToken);
+    Task<CharacterSummary?> AwardExperienceAsync(
+        Guid accountId,
+        Guid realmId,
+        Guid characterId,
+        int amount,
+        CharacterExperienceSource source,
+        string? sourceKey,
+        CancellationToken cancellationToken);
 }

@@ -186,10 +186,28 @@ app.MapPost("/api/clubs", async (CreateClubRequest request, ClubService service,
         ClubCreateStatus.Created => Results.Created($"/api/clubs/{result.Club!.ClubId}", result.Club),
         ClubCreateStatus.PresidentNotFound => Results.NotFound(new { error = "president_not_found", message = "The president character could not be found for that account and realm." }),
         ClubCreateStatus.PresidentAlreadyInClub => Results.Conflict(new { error = "president_already_in_club", message = "That character is already in a club." }),
+        ClubCreateStatus.CharterNotFound => Results.Conflict(new { error = "club_charter_missing", message = "The club charter could not be found in that inventory slot." }),
         ClubCreateStatus.NameTaken => Results.Conflict(new { error = "club_name_taken", message = "That club name is already taken on this realm." }),
         ClubCreateStatus.TagTaken => Results.Conflict(new { error = "club_tag_taken", message = "That club tag is already taken on this realm." }),
         ClubCreateStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_create_request", messages = result.Errors }),
         _ => Results.Problem("The club could not be created.")
+    };
+});
+
+app.MapPost("/api/clubs/from-charter", async (CreateClubFromCharterRequest request, ClubService service, CancellationToken cancellationToken) =>
+{
+    var result = await service.CreateFromCharterAsync(request, cancellationToken);
+
+    return result.Status switch
+    {
+        ClubCreateStatus.Created => Results.Created($"/api/clubs/{result.Club!.ClubId}", result.Club),
+        ClubCreateStatus.PresidentNotFound => Results.NotFound(new { error = "president_not_found", message = "The president character could not be found for that account and realm." }),
+        ClubCreateStatus.PresidentAlreadyInClub => Results.Conflict(new { error = "president_already_in_club", message = "That character is already in a club." }),
+        ClubCreateStatus.CharterNotFound => Results.Conflict(new { error = "club_charter_missing", message = "The club charter could not be found in that inventory slot." }),
+        ClubCreateStatus.NameTaken => Results.Conflict(new { error = "club_name_taken", message = "That club name is already taken on this realm." }),
+        ClubCreateStatus.TagTaken => Results.Conflict(new { error = "club_tag_taken", message = "That club tag is already taken on this realm." }),
+        ClubCreateStatus.InvalidRequest => Results.BadRequest(new { error = "invalid_club_charter_request", messages = result.Errors }),
+        _ => Results.Problem("The club could not be created from that charter.")
     };
 });
 

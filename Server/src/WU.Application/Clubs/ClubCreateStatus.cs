@@ -6,6 +6,7 @@ public enum ClubCreateStatus
     InvalidRequest,
     PresidentNotFound,
     PresidentAlreadyInClub,
+    CharterNotFound,
     NameTaken,
     TagTaken
 }

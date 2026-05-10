@@ -6,6 +6,7 @@
 #include "Backend/WUClientSessionSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Inventory/WUInventoryTypes.h"
+#include "NPC/WUNpcTypes.h"
 #include "Styling/SlateBrush.h"
 #include "WUVendorWidget.generated.h"
 
@@ -25,7 +26,7 @@ public:
 	UWUVendorWidget(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION(BlueprintCallable, Category = "Vendor")
-	void ShowVendor(FName VendorTableId, FText VendorName, FText GreetingText);
+	void ShowVendor(const FWUNpcProfile& NpcProfile, FText VendorName, FText GreetingText);
 
 	UFUNCTION(BlueprintCallable, Category = "Vendor")
 	void HideVendor();
@@ -40,7 +41,7 @@ protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
-	FVector2D VendorSize = FVector2D(380.0f, 260.0f);
+	FVector2D VendorSize = FVector2D(460.0f, 560.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
 	TObjectPtr<UTexture2D> PanelTexture;
@@ -56,6 +57,15 @@ protected:
 
 private:
 
+	enum class EVendorPanelMode : uint8
+	{
+		Dialogue,
+		Merchant,
+		Buyback
+	};
+
+	static constexpr int32 ItemsPerMerchantPage = 10;
+
 	EVisibility GetVendorVisibility() const;
 	FText GetVendorTitleText() const;
 	FText GetVendorGreetingText() const;
@@ -63,9 +73,30 @@ private:
 	EVisibility GetVendorStatusVisibility() const;
 	const FWUVendorTable* ResolveActiveVendorTable() const;
 	FName GetResolvedVendorTableId() const;
-	TSharedRef<SWidget> CreateVendorItemsSection();
-	TSharedRef<SWidget> CreateVendorItemRow(const FWUVendorItem& VendorItem);
+	void RefreshActiveContent();
+	TSharedRef<SWidget> CreateActiveContent();
+	TSharedRef<SWidget> CreateHeaderSection();
+	TSharedRef<SWidget> CreateDialogueSection();
+	TSharedRef<SWidget> CreateMerchantSection();
+	TSharedRef<SWidget> CreateBuybackSection();
+	TSharedRef<SWidget> CreateTabButton(FText Label, EVendorPanelMode TargetMode) const;
+	TSharedRef<SWidget> CreateVendorItemCard(const FWUVendorItem& VendorItem);
+	TSharedRef<SWidget> CreateRepairSection();
+	TSharedRef<SWidget> CreatePageControls() const;
+	const FSlateBrush* GetItemIconBrush(const FWUInventoryItem& Item, const FVector2D& ImageSize);
+	bool HasMerchantItems() const;
+	int32 GetMerchantPageCount() const;
+	int32 GetClampedMerchantPageIndex() const;
+	FText GetMerchantPageText() const;
 	FReply HandleBuyClicked(FName ItemId);
+	FReply HandleBrowseClicked();
+	FReply HandleMerchantTabClicked();
+	FReply HandleBuybackTabClicked();
+	FReply HandlePreviousPageClicked();
+	FReply HandleNextPageClicked();
+	FReply HandleRepairClicked(bool bRepairAll);
+	FReply HandleQuestClicked();
+	FReply HandleGoodbyeClicked();
 	void ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin = FMargin(0.0f));
 	UWUClientSessionSubsystem* GetSessionSubsystem() const;
 
@@ -78,9 +109,15 @@ private:
 private:
 
 	bool bVendorOpen = false;
+	EVendorPanelMode ActiveMode = EVendorPanelMode::Dialogue;
 	FName ActiveVendorTableId;
+	FWUNpcProfile ActiveNpcProfile;
 	FText ActiveVendorName;
 	FText ActiveGreetingText;
 	FText StatusText;
+	int32 MerchantPageIndex = 0;
+	TSharedPtr<SBox> ActiveContentBox;
 	FSlateBrush PanelBrush;
+	TMap<FString, FSlateBrush> IconBrushCache;
+	TMap<FString, TObjectPtr<UTexture2D>> IconTextureCache;
 };

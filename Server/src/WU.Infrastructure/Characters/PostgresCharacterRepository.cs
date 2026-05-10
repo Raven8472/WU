@@ -107,7 +107,14 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         return await dbCommand.ExecuteNonQueryAsync(cancellationToken) > 0;
     }
 
-    public async Task<CharacterSummary?> AwardExperienceAsync(Guid accountId, Guid realmId, Guid characterId, int amount, CancellationToken cancellationToken)
+    public async Task<CharacterSummary?> AwardExperienceAsync(
+        Guid accountId,
+        Guid realmId,
+        Guid characterId,
+        int amount,
+        CharacterExperienceSource source,
+        string? sourceKey,
+        CancellationToken cancellationToken)
     {
         await EnsureCharacterSchemaAsync(cancellationToken);
 
@@ -119,6 +126,25 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
         {
             await transaction.RollbackAsync(cancellationToken);
             return null;
+        }
+
+        var normalizedSourceKey = NormalizeExperienceSourceKey(sourceKey);
+        if (normalizedSourceKey is not null)
+        {
+            var insertedAward = await TryInsertExperienceAwardAsync(
+                connection,
+                transaction,
+                characterId,
+                source,
+                normalizedSourceKey,
+                amount,
+                cancellationToken);
+
+            if (!insertedAward)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return currentCharacter;
+            }
         }
 
         var updatedProgression = CharacterStatRules.ResolveExperienceAward(
@@ -264,6 +290,20 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 ADD COLUMN IF NOT EXISTS experience integer NOT NULL DEFAULT 0,
                 ADD COLUMN IF NOT EXISTS house smallint NOT NULL DEFAULT 0;
 
+            CREATE TABLE IF NOT EXISTS character_experience_awards (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                character_id uuid NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                source smallint NOT NULL,
+                source_key text NOT NULL,
+                amount integer NOT NULL,
+                awarded_at timestamptz NOT NULL DEFAULT now(),
+                CONSTRAINT ck_character_experience_awards_amount CHECK (amount > 0),
+                CONSTRAINT uq_character_experience_awards_source UNIQUE (character_id, source, source_key)
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_character_experience_awards_character
+                ON character_experience_awards(character_id);
+
             UPDATE characters
             SET house = 0
             WHERE house IS NULL;
@@ -322,6 +362,41 @@ public sealed class PostgresCharacterRepository(NpgsqlDataSource dataSource) : I
                 X: reader.GetFloat(7),
                 Y: reader.GetFloat(8),
                 Z: reader.GetFloat(9)));
+    }
+
+    private static string? NormalizeExperienceSourceKey(string? sourceKey)
+    {
+        var trimmedSourceKey = sourceKey?.Trim();
+        return string.IsNullOrWhiteSpace(trimmedSourceKey)
+            ? null
+            : trimmedSourceKey.ToLowerInvariant();
+    }
+
+    private static async Task<bool> TryInsertExperienceAwardAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid characterId,
+        CharacterExperienceSource source,
+        string sourceKey,
+        int amount,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            INSERT INTO character_experience_awards (character_id, source, source_key, amount)
+            VALUES (@character_id, @source, @source_key, @amount)
+            ON CONFLICT (character_id, source, source_key) DO NOTHING
+            RETURNING id;
+            """;
+
+        await using var dbCommand = new NpgsqlCommand(sql, connection);
+        dbCommand.Transaction = transaction;
+        dbCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+        dbCommand.Parameters.AddWithValue("source", NpgsqlDbType.Smallint, (short)source);
+        dbCommand.Parameters.AddWithValue("source_key", NpgsqlDbType.Text, sourceKey);
+        dbCommand.Parameters.AddWithValue("amount", NpgsqlDbType.Integer, amount);
+
+        var insertedId = await dbCommand.ExecuteScalarAsync(cancellationToken);
+        return insertedId is Guid;
     }
 
     private static async Task UpdateCharacterProgressionAsync(

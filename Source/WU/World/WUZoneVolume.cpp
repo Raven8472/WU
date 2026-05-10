@@ -148,7 +148,7 @@ void AWUZoneVolume::AwardExplorationExperience(AWUCharacter* Character)
 	}
 
 	CharactersAwardedExploration.Add(Character);
-	Character->AwardExperience(ExplorationExperience, EWUExperienceSource::Exploration);
+	Character->AwardExplorationExperience(ExplorationExperience, ZoneId);
 
 	if (bLogZoneChanges)
 	{

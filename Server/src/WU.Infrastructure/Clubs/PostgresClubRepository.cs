@@ -85,6 +85,84 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         }
     }
 
+    public async Task<ClubCreateResult> CreateFromCharterAsync(
+        CreateClubCommand command,
+        int charterSlotIndex,
+        string charterItemId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureClubSchemaAsync(cancellationToken);
+        await EnsureCharterInventorySchemaAsync(cancellationToken);
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            if (!await CharacterExistsForAccountRealmAsync(connection, transaction, command.AccountId, command.RealmId, command.PresidentCharacterId, cancellationToken))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubCreateResult.PresidentNotFound();
+            }
+
+            if (await CharacterHasClubAsync(connection, transaction, command.PresidentCharacterId, cancellationToken))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubCreateResult.PresidentAlreadyInClub();
+            }
+
+            if (!await CharacterHasInventoryItemAsync(connection, transaction, command.PresidentCharacterId, charterSlotIndex, charterItemId, cancellationToken))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubCreateResult.CharterNotFound();
+            }
+
+            var conflict = await FindActiveClubConflictAsync(connection, transaction, command.RealmId, command.NormalizedName, command.NormalizedTag, cancellationToken);
+            if (conflict == ClubNameConflict.Name)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubCreateResult.NameTaken();
+            }
+
+            if (conflict == ClubNameConflict.Tag)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return ClubCreateResult.TagTaken();
+            }
+
+            var club = await InsertClubAsync(connection, transaction, command, cancellationToken);
+            await InsertDefaultRankPermissionsAsync(connection, transaction, club.ClubId, cancellationToken);
+            await InsertClubMemberAsync(connection, transaction, club.ClubId, command.PresidentCharacterId, EWuClubRank.President, cancellationToken);
+            await ConsumeInventoryItemAsync(connection, transaction, command.PresidentCharacterId, charterSlotIndex, charterItemId, cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+
+            return ClubCreateResult.Created(new CharacterClubSummary(
+                club.ClubId,
+                club.Name,
+                club.Tag,
+                EWuClubRank.President,
+                AllClubPermissionsMask,
+                string.Empty,
+                string.Empty));
+        }
+        catch (PostgresException exception) when (exception.SqlState == UniqueViolationSqlState && IsClubNameConstraint(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return ClubCreateResult.NameTaken();
+        }
+        catch (PostgresException exception) when (exception.SqlState == UniqueViolationSqlState && IsClubTagConstraint(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return ClubCreateResult.TagTaken();
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     public async Task<ClubInviteResult> InviteAsync(Guid clubId, Guid inviterCharacterId, Guid invitedCharacterId, CancellationToken cancellationToken)
     {
         await EnsureClubSchemaAsync(cancellationToken);
@@ -299,6 +377,31 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private async Task EnsureCharterInventorySchemaAsync(CancellationToken cancellationToken)
+    {
+        const string sql = """
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+            CREATE TABLE IF NOT EXISTS character_inventory_items (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                character_id uuid NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                slot_index integer NOT NULL CHECK (slot_index >= 0),
+                item_id text NOT NULL,
+                quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (character_id, slot_index)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_character_inventory_items_character
+                ON character_inventory_items (character_id, slot_index);
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static async Task<bool> CharacterExistsForAccountRealmAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -363,6 +466,32 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         await using var command = new NpgsqlCommand(sql, connection);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+
+        return await command.ExecuteScalarAsync(cancellationToken) is not null;
+    }
+
+    private static async Task<bool> CharacterHasInventoryItemAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid characterId,
+        int slotIndex,
+        string itemId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT 1
+            FROM character_inventory_items
+            WHERE character_id = @character_id
+              AND slot_index = @slot_index
+              AND lower(item_id) = lower(@item_id)
+            FOR UPDATE;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+        command.Parameters.AddWithValue("slot_index", NpgsqlDbType.Integer, slotIndex);
+        command.Parameters.AddWithValue("item_id", NpgsqlDbType.Text, itemId);
 
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
@@ -494,6 +623,52 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         command.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
         command.Parameters.AddWithValue("rank", NpgsqlDbType.Smallint, (short)rank);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task ConsumeInventoryItemAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid characterId,
+        int slotIndex,
+        string itemId,
+        CancellationToken cancellationToken)
+    {
+        const string updateSql = """
+            UPDATE character_inventory_items
+            SET quantity = quantity - 1,
+                updated_at = now()
+            WHERE character_id = @character_id
+              AND slot_index = @slot_index
+              AND lower(item_id) = lower(@item_id)
+              AND quantity > 1;
+            """;
+
+        await using (var updateCommand = new NpgsqlCommand(updateSql, connection))
+        {
+            updateCommand.Transaction = transaction;
+            updateCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+            updateCommand.Parameters.AddWithValue("slot_index", NpgsqlDbType.Integer, slotIndex);
+            updateCommand.Parameters.AddWithValue("item_id", NpgsqlDbType.Text, itemId);
+
+            if (await updateCommand.ExecuteNonQueryAsync(cancellationToken) > 0)
+            {
+                return;
+            }
+        }
+
+        const string deleteSql = """
+            DELETE FROM character_inventory_items
+            WHERE character_id = @character_id
+              AND slot_index = @slot_index
+              AND lower(item_id) = lower(@item_id);
+            """;
+
+        await using var deleteCommand = new NpgsqlCommand(deleteSql, connection);
+        deleteCommand.Transaction = transaction;
+        deleteCommand.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
+        deleteCommand.Parameters.AddWithValue("slot_index", NpgsqlDbType.Integer, slotIndex);
+        deleteCommand.Parameters.AddWithValue("item_id", NpgsqlDbType.Text, itemId);
+        await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<ClubInfo?> GetClubInfoAsync(

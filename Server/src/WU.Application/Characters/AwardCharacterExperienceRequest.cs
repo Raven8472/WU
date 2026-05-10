@@ -6,4 +6,5 @@ public sealed record AwardCharacterExperienceRequest(
     Guid AccountId,
     Guid RealmId,
     int Amount,
-    CharacterExperienceSource Source);
+    CharacterExperienceSource Source,
+    string? SourceKey = null);

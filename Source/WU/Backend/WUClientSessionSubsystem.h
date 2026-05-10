@@ -324,8 +324,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source);
 
+	void AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source, const FString& SourceKey);
+
 	UFUNCTION(BlueprintCallable, Category = "WU|Club")
 	void CreateClub(const FString& Name, const FString& Tag, const FString& Description);
+
+	UFUNCTION(BlueprintCallable, Category = "WU|Club")
+	void CreateClubFromSelectedCharter(const FString& Name, int32 CharterSlotIndex, const FString& CharterItemId);
 
 	UFUNCTION(BlueprintCallable, Category = "WU|Club")
 	void InviteCharacterToSelectedClub(const FString& InvitedCharacterId);

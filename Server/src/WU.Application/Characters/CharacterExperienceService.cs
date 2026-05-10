@@ -1,3 +1,5 @@
+using WU.Domain.Characters;
+
 namespace WU.Application.Characters;
 
 public sealed class CharacterExperienceService(ICharacterRepository repository)
@@ -15,6 +17,8 @@ public sealed class CharacterExperienceService(ICharacterRepository repository)
             request.RealmId,
             characterId,
             request.Amount,
+            request.Source,
+            request.SourceKey,
             cancellationToken);
 
         return character is null
@@ -44,6 +48,11 @@ public sealed class CharacterExperienceService(ICharacterRepository repository)
         if (request.Amount <= 0)
         {
             errors.Add("amount must be greater than zero.");
+        }
+
+        if (request.Source == CharacterExperienceSource.Exploration && string.IsNullOrWhiteSpace(request.SourceKey))
+        {
+            errors.Add("sourceKey is required for exploration experience.");
         }
 
         return errors;

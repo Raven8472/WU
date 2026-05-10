@@ -7,6 +7,7 @@
 #include "CharacterCreation/WUCharacterCreationTypes.h"
 #include "CharacterStats/WUCharacterStats.h"
 #include "GameFramework/PlayerController.h"
+#include "Inventory/WUInventoryTypes.h"
 #include "WUPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -18,11 +19,13 @@ class AWUCharacter;
 class UWUCharacterCreatorWidget;
 class UWUCharacterPanelWidget;
 class UWUChatWidget;
+class UWUClubCharterPromptWidget;
 class UWUExperienceBarWidget;
 class UWUInventoryWidget;
 class UWUPlayerFrameWidget;
 class UWUTargetFrameWidget;
 class UWUVendorWidget;
+class UWUWorldHoverTooltipWidget;
 class UWUZoneNameWidget;
 class AWUNpcCharacter;
 
@@ -47,7 +50,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	TArray<UInputMappingContext*> MobileExcludedMappingContexts;
 
-	/** Click/select target action. If unset, left mouse click is bound directly as a fallback. */
+	/** Deprecated: left mouse world clicks are routed by the possessed character after drag detection. */
 	UPROPERTY(EditAnywhere, Category = "Input|Targeting")
 	UInputAction* ClickTargetAction;
 
@@ -123,6 +126,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
 	FVector2D ZoneNameViewportSize = FVector2D(280.0f, 30.0f);
 
+	/** Bottom-right world hover tooltip widget. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	TSubclassOf<UWUWorldHoverTooltipWidget> WorldHoverTooltipWidgetClass;
+
+	/** Pointer to the native world hover tooltip widget. */
+	UPROPERTY()
+	TObjectPtr<UWUWorldHoverTooltipWidget> WorldHoverTooltipWidget;
+
+	/** Viewport position for the world hover tooltip. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D WorldHoverTooltipViewportPosition = FVector2D(-28.0f, -184.0f);
+
+	/** Viewport size for the world hover tooltip. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D WorldHoverTooltipViewportSize = FVector2D(300.0f, 86.0f);
+
 	/** Native player chat widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Chat")
 	TSubclassOf<UWUChatWidget> ChatWidgetClass;
@@ -163,6 +182,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "UI|Inventory")
 	FVector2D InventoryViewportSize = FVector2D(620.0f, 420.0f);
 
+	/** Temporary dev prompt used when clicking a Club Charter inventory item. */
+	UPROPERTY(EditAnywhere, Category = "UI|Club")
+	TSubclassOf<UWUClubCharterPromptWidget> ClubCharterPromptWidgetClass;
+
+	/** Pointer to the native club charter prompt widget. */
+	UPROPERTY()
+	TObjectPtr<UWUClubCharterPromptWidget> ClubCharterPromptWidget;
+
+	/** Viewport position for the club charter prompt. */
+	UPROPERTY(EditAnywhere, Category = "UI|Club")
+	FVector2D ClubCharterPromptViewportPosition = FVector2D(0.0f, 0.0f);
+
+	/** Viewport size for the club charter prompt. */
+	UPROPERTY(EditAnywhere, Category = "UI|Club")
+	FVector2D ClubCharterPromptViewportSize = FVector2D(360.0f, 210.0f);
+
 	/** Native vendor shell widget to spawn for NPC shops */
 	UPROPERTY(EditAnywhere, Category = "UI|Vendor")
 	TSubclassOf<UWUVendorWidget> VendorWidgetClass;
@@ -177,7 +212,7 @@ protected:
 
 	/** Viewport size for the vendor shell widget */
 	UPROPERTY(EditAnywhere, Category = "UI|Vendor")
-	FVector2D VendorViewportSize = FVector2D(380.0f, 260.0f);
+	FVector2D VendorViewportSize = FVector2D(460.0f, 560.0f);
 
 	/** Native character panel widget to spawn for the local player */
 	UPROPERTY(EditAnywhere, Category = "UI|Character")
@@ -413,12 +448,15 @@ public:
 
 	/** Owning client persists awarded XP to the account backend. */
 	UFUNCTION(Client, Reliable)
-	void Client_HandleExperienceAward(int32 Amount, EWUExperienceSource Source);
+	void Client_HandleExperienceAward(int32 Amount, EWUExperienceSource Source, const FString& SourceKey);
 
 protected:
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
+
+	/** Updates cursor-driven world hover UI. */
+	virtual void PlayerTick(float DeltaTime) override;
 
 	/** Saves selected character location when the controller leaves gameplay. */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -459,6 +497,9 @@ protected:
 	/** Returns true while the character creator shell window is open. */
 	bool IsCharacterCreatorOpen() const;
 
+	/** Returns true while the club charter naming prompt is open. */
+	bool IsClubCharterPromptOpen() const;
+
 	/** Finds an interactable NPC under the cursor. */
 	AWUNpcCharacter* FindNpcUnderCursor() const;
 
@@ -467,6 +508,12 @@ protected:
 
 	/** Returns true when the NPC is close enough for interaction. */
 	bool IsNpcInInteractionRange(const AWUNpcCharacter* NpcCharacter) const;
+
+	/** Updates the bottom-right world hover tooltip from the actor under the cursor. */
+	void UpdateWorldHoverTooltip();
+
+	/** Finds a player character or NPC beneath the cursor without interaction range gating. */
+	AActor* FindWorldHoverActorUnderCursor() const;
 
 	/** Ensures a local-only preview actor exists for the character creator. */
 	AWUCharacterCreatorPreviewActor* EnsureCharacterCreatorPreviewActor();
@@ -492,12 +539,38 @@ protected:
 	UFUNCTION()
 	void HandleInventorySnapshotLoaded(const FWUBackendInventorySnapshot& Snapshot);
 
+	UFUNCTION()
+	void HandleSessionCharacterUpdated(const FWUBackendCharacterSummary& UpdatedCharacter);
+
+	UFUNCTION()
+	void HandleInventoryItemUseRequested(int32 SlotIndex, FWUInventoryItem Item);
+
+	UFUNCTION()
+	void HandleClubCharterSubmitted(const FString& ClubName, int32 SlotIndex, FWUInventoryItem Item);
+
+	UFUNCTION()
+	void HandleClubCharterPromptCancelled();
+
+	UFUNCTION()
+	void HandleClubCreated(const FWUClubSummary& Club);
+
+	UFUNCTION()
+	void HandleSessionRequestFailed(const FString& ErrorMessage);
+
+	void ShowClubCharterPrompt(int32 SlotIndex, const FWUInventoryItem& Item);
+	void HideClubCharterPrompt();
+	void RestoreInputAfterModalPrompt();
+
 	/** Applies a loaded backend inventory snapshot to the currently possessed pawn. */
 	bool ApplyInventorySnapshotToCurrentPawn(const FWUBackendInventorySnapshot& Snapshot);
 
 	/** Server-authoritative experience award entry point. */
 	UFUNCTION(Server, Reliable)
 	void Server_RequestSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source);
+
+	/** Server-authoritative idempotent exploration award for a specific zone. */
+	UFUNCTION(Server, Reliable)
+	void Server_RequestZoneExplorationExperience(int32 Amount, FName ZoneId);
 
 	/** Server-authoritative saved location restore for the selected character. */
 	UFUNCTION(Server, Reliable)
@@ -529,6 +602,7 @@ private:
 	FString AppliedSessionCharacterId;
 	FString AppliedSessionSpawnCharacterId;
 	FString AppliedInventoryCharacterId;
+	int32 PendingClubCharterSlotIndex = INDEX_NONE;
 	FTimerHandle CharacterLocationSaveTimerHandle;
 
 };

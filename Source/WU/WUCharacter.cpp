@@ -9,6 +9,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
@@ -30,6 +31,7 @@
 #include "Materials/MaterialInterface.h"
 #include "WUPlayerController.h"
 #include "CharacterCreation/WUCharacterAssetPaths.h"
+#include "UI/WUOverheadNameWidget.h"
 
 namespace
 {
@@ -113,6 +115,16 @@ AWUCharacter::AWUCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	OverheadNameComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("OverheadName"));
+	OverheadNameComponent->SetupAttachment(RootComponent);
+	OverheadNameComponent->SetWidgetClass(UWUOverheadNameWidget::StaticClass());
+	OverheadNameComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	OverheadNameComponent->SetDrawAtDesiredSize(true);
+	OverheadNameComponent->SetPivot(FVector2D(0.5f, 1.0f));
+	OverheadNameComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 138.0f));
+	OverheadNameComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	OverheadNameComponent->SetGenerateOverlapEvents(false);
 
 	HeadMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("HeadMesh"));
 	HeadMeshComponent->SetupAttachment(GetMesh());
@@ -199,6 +211,7 @@ void AWUCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AWUCharacter, InventorySlots);
 	DOREPLIFETIME(AWUCharacter, EquipmentSlots);
 	DOREPLIFETIME(AWUCharacter, CharacterAppearance);
+	DOREPLIFETIME(AWUCharacter, DisplayName);
 }
 
 void AWUCharacter::BeginPlay()
@@ -221,6 +234,7 @@ void AWUCharacter::BeginPlay()
 	DeathWidget = nullptr;
 
 	ApplyCharacterAppearanceMeshes();
+	RefreshOverheadName();
 
 	// Apply the initial alive/dead collision and movement state on spawn so
 	// freshly spawned players match the same rules used after later state changes.
@@ -232,6 +246,7 @@ void AWUCharacter::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	UpdateMouseSteering(DeltaSeconds);
+	RefreshOverheadName();
 
 	if (HasAuthority())
 	{
@@ -399,7 +414,7 @@ void AWUCharacter::TargetUnderCursorInput()
 {
 	if (AWUPlayerController* WUPC = Cast<AWUPlayerController>(GetController()))
 	{
-		WUPC->TargetUnderCursor();
+		WUPC->HandlePrimaryWorldClick();
 	}
 }
 
@@ -639,6 +654,11 @@ void AWUCharacter::OnRep_CharacterAppearance()
 
 void AWUCharacter::OnRep_CurrentZone()
 {
+}
+
+void AWUCharacter::OnRep_DisplayName()
+{
+	RefreshOverheadName();
 }
 
 float AWUCharacter::GetHealthPercent() const
@@ -949,7 +969,7 @@ void AWUCharacter::AwardExperience(int32 Amount, EWUExperienceSource Source)
 
 	if (AWUPlayerController* OwningController = Cast<AWUPlayerController>(GetController()))
 	{
-		OwningController->Client_HandleExperienceAward(Amount, Source);
+		OwningController->Client_HandleExperienceAward(Amount, Source, FString());
 	}
 
 	if (GEngine)
@@ -961,6 +981,19 @@ void AWUCharacter::AwardExperience(int32 Amount, EWUExperienceSource Source)
 			? FString::Printf(TEXT("%s gained %d %s XP and reached level %d"), *GetName(), Amount, *SourceLabel, CharacterLevel)
 			: FString::Printf(TEXT("%s gained %d %s XP"), *GetName(), Amount, *SourceLabel);
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, ProgressionMessage);
+	}
+}
+
+void AWUCharacter::AwardExplorationExperience(int32 Amount, FName ZoneId)
+{
+	if (!HasAuthority() || Amount <= 0 || ZoneId.IsNone())
+	{
+		return;
+	}
+
+	if (AWUPlayerController* OwningController = Cast<AWUPlayerController>(GetController()))
+	{
+		OwningController->Client_HandleExperienceAward(Amount, EWUExperienceSource::Exploration, ZoneId.ToString());
 	}
 }
 
@@ -986,6 +1019,35 @@ FText AWUCharacter::GetDisplayName() const
 void AWUCharacter::SetDisplayName(const FText& NewDisplayName)
 {
 	DisplayName = NewDisplayName;
+	RefreshOverheadName();
+}
+
+void AWUCharacter::RefreshOverheadName()
+{
+	UWUOverheadNameWidget* NameWidget = GetOverheadNameWidget();
+	if (!NameWidget)
+	{
+		return;
+	}
+
+	const FText ResolvedName = GetDisplayName();
+	const FString ResolvedNameString = ResolvedName.ToString();
+	if (LastOverheadNameText == ResolvedNameString)
+	{
+		return;
+	}
+
+	LastOverheadNameText = ResolvedNameString;
+	NameWidget->SetNameText(ResolvedName);
+	NameWidget->SetSubtitleText(FText::GetEmpty());
+	NameWidget->SetNameColor(FSlateColor(FLinearColor(0.0f, 0.84f, 0.38f, 1.0f)));
+}
+
+UWUOverheadNameWidget* AWUCharacter::GetOverheadNameWidget() const
+{
+	return OverheadNameComponent
+		? Cast<UWUOverheadNameWidget>(OverheadNameComponent->GetUserWidgetObject())
+		: nullptr;
 }
 
 UTexture2D* AWUCharacter::GetPortraitTexture() const

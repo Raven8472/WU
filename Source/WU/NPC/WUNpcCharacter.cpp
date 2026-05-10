@@ -4,11 +4,13 @@
 #include "CharacterCreation/WUCharacterAssetPaths.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "NPC/WUNpcDefinition.h"
+#include "UI/WUOverheadNameWidget.h"
 
 AWUNpcCharacter::AWUNpcCharacter()
 {
@@ -19,6 +21,16 @@ AWUNpcCharacter::AWUNpcCharacter()
 	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
 	GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 	ConfigureBodyMeshComponent();
+
+	OverheadNameComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("OverheadName"));
+	OverheadNameComponent->SetupAttachment(RootComponent);
+	OverheadNameComponent->SetWidgetClass(UWUOverheadNameWidget::StaticClass());
+	OverheadNameComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	OverheadNameComponent->SetDrawAtDesiredSize(true);
+	OverheadNameComponent->SetPivot(FVector2D(0.5f, 1.0f));
+	OverheadNameComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 138.0f));
+	OverheadNameComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	OverheadNameComponent->SetGenerateOverlapEvents(false);
 
 	HeadMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("HeadMesh"));
 	HeadMeshComponent->SetupAttachment(GetMesh());
@@ -70,6 +82,7 @@ void AWUNpcCharacter::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	RefreshNpcFromDefinition();
+	RefreshOverheadName();
 }
 
 void AWUNpcCharacter::BeginPlay()
@@ -77,6 +90,7 @@ void AWUNpcCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	RefreshNpcFromDefinition();
+	RefreshOverheadName();
 }
 
 void AWUNpcCharacter::RefreshNpcFromDefinition()
@@ -88,6 +102,7 @@ void AWUNpcCharacter::RefreshNpcFromDefinition()
 	}
 
 	UpdateNpcAppearance();
+	RefreshOverheadName();
 }
 
 void AWUNpcCharacter::ApplyNpcAppearance(const FWUCharacterAppearance& NewAppearance)
@@ -99,6 +114,7 @@ void AWUNpcCharacter::ApplyNpcAppearance(const FWUCharacterAppearance& NewAppear
 void AWUNpcCharacter::SetNpcProfile(const FWUNpcProfile& NewProfile)
 {
 	Profile = NewProfile;
+	RefreshOverheadName();
 }
 
 FWUNpcProfile AWUNpcCharacter::GetNpcProfile() const
@@ -121,6 +137,37 @@ FText AWUNpcCharacter::GetNpcDisplayName() const
 	return Profile.NpcId.IsNone() ? NSLOCTEXT("WUNpc", "FallbackNpcDisplayName", "NPC") : FText::FromName(Profile.NpcId);
 }
 
+void AWUNpcCharacter::RefreshOverheadName()
+{
+	if (UWUOverheadNameWidget* NameWidget = GetOverheadNameWidget())
+	{
+		FLinearColor NameColor(0.0f, 0.84f, 0.38f, 1.0f);
+		switch (Profile.Disposition)
+		{
+		case EWUNpcDisposition::NeutralEnemy:
+			NameColor = FLinearColor(1.0f, 0.86f, 0.20f, 1.0f);
+			break;
+		case EWUNpcDisposition::HostileEnemy:
+			NameColor = FLinearColor(1.0f, 0.18f, 0.12f, 1.0f);
+			break;
+		case EWUNpcDisposition::Friendly:
+		default:
+			break;
+		}
+
+		NameWidget->SetNameText(GetNpcDisplayName());
+		NameWidget->SetSubtitleText(FText::GetEmpty());
+		NameWidget->SetNameColor(FSlateColor(NameColor));
+	}
+}
+
+UWUOverheadNameWidget* AWUNpcCharacter::GetOverheadNameWidget() const
+{
+	return OverheadNameComponent
+		? Cast<UWUOverheadNameWidget>(OverheadNameComponent->GetUserWidgetObject())
+		: nullptr;
+}
+
 FText AWUNpcCharacter::GetInteractionPrompt() const
 {
 	if (!Profile.InteractionPrompt.IsEmpty())
@@ -141,14 +188,34 @@ FText AWUNpcCharacter::GetInteractionPrompt() const
 	}
 }
 
+FText AWUNpcCharacter::GetVendorTypeLabel() const
+{
+	if (!Profile.VendorTypeLabel.IsEmpty())
+	{
+		return Profile.VendorTypeLabel;
+	}
+
+	if (CanOpenVendor())
+	{
+		return NSLOCTEXT("WUNpc", "GenericVendorType", "Vendor");
+	}
+
+	if (Profile.Role == EWUNpcRole::Banker)
+	{
+		return NSLOCTEXT("WUNpc", "BankerVendorType", "Banker");
+	}
+
+	return FText::GetEmpty();
+}
+
 bool AWUNpcCharacter::CanOfferQuest() const
 {
-	return Profile.Role == EWUNpcRole::QuestGiver && !Profile.QuestId.IsNone();
+	return !Profile.QuestId.IsNone();
 }
 
 bool AWUNpcCharacter::CanOpenVendor() const
 {
-	return Profile.Role == EWUNpcRole::Vendor && !Profile.VendorTableId.IsNone();
+	return !Profile.VendorTableId.IsNone();
 }
 
 void AWUNpcCharacter::UpdateNpcAppearance()

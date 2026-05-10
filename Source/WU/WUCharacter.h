@@ -19,7 +19,9 @@ class USkeletalMesh;
 class USkeletalMeshComponent;
 class UTexture2D;
 class UUserWidget;
+class UWidgetComponent;
 class AActor;
+class UWUOverheadNameWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -40,6 +42,10 @@ class WU_API AWUCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
+
+	/** Screen-space name label shown above the character. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UWidgetComponent> OverheadNameComponent;
 
 protected:
 
@@ -121,7 +127,7 @@ protected:
 	TSubclassOf<AActor> CorpseMarkerClass;
 
 	/** Optional display name used by HUD frames when this character is targeted */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_DisplayName, Category = "HUD")
 	FText DisplayName;
 
 	/** Optional portrait texture used by HUD frames when this character is targeted */
@@ -296,6 +302,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Stats")
 	void AwardExperience(int32 Amount, EWUExperienceSource Source);
 
+	/** Requests idempotent exploration XP for a specific gameplay zone. */
+	void AwardExplorationExperience(int32 Amount, FName ZoneId);
+
 	/** Returns health normalized to the max health for HUD usage */
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetHealthPercent() const;
@@ -459,6 +468,9 @@ public:
 	UFUNCTION()
 	void OnRep_CurrentZone();
 
+	UFUNCTION()
+	void OnRep_DisplayName();
+
 	/** Applies movement/collision/visual behavior for alive, dead, and spirit states */
 	void UpdateDeathStateEffects();
 
@@ -529,6 +541,7 @@ protected:
 	bool bLeftMouseLookHeld = false;
 	bool bRightMouseLookHeld = false;
 	bool bSuppressLeftClickTargetOnRelease = false;
+	FString LastOverheadNameText;
 	FString CurrentBackpedalAnimationPath;
 	FString CurrentTurnInPlaceAnimationPath;
 
@@ -555,7 +568,7 @@ protected:
 	void OnRightMousePressed();
 	void OnRightMouseReleased();
 
-	/** Fallback target-select input routed through the possessed pawn input component */
+	/** Primary world click routed after mouse-look drag detection. */
 	void TargetUnderCursorInput();
 
 	/** Fallback target-cycle input routed through the possessed pawn input component */
@@ -569,6 +582,8 @@ protected:
 	bool IsMouseCameraOrbitActive() const;
 	bool IsMouseFacingControlActive() const;
 	bool IsDualMouseDriveActive() const;
+	void RefreshOverheadName();
+	UWUOverheadNameWidget* GetOverheadNameWidget() const;
 
 public:
 

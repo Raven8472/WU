@@ -169,6 +169,11 @@ void UWUClientSessionSubsystem::SaveSelectedCharacterLocation(const FVector& Loc
 
 void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source)
 {
+	AwardSelectedCharacterExperience(Amount, Source, FString());
+}
+
+void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, EWUExperienceSource Source, const FString& SourceKey)
+{
 	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
 	{
 		return;
@@ -183,6 +188,10 @@ void UWUClientSessionSubsystem::AwardSelectedCharacterExperience(int32 Amount, E
 	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
 	RootObject->SetNumberField(TEXT("amount"), Amount);
 	RootObject->SetStringField(TEXT("source"), ExperienceSourceToString(Source));
+	if (!SourceKey.IsEmpty())
+	{
+		RootObject->SetStringField(TEXT("sourceKey"), SourceKey);
+	}
 
 	const FString Path = FString::Printf(TEXT("/api/characters/%s/experience"), *SelectedCharacterId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), Path);
@@ -214,6 +223,44 @@ void UWUClientSessionSubsystem::CreateClub(const FString& Name, const FString& T
 	RootObject->SetStringField(TEXT("description"), Description.TrimStartAndEnd());
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/clubs"));
+	SetJsonBody(Request, RootObject);
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateClubResponse);
+	Request->ProcessRequest();
+}
+
+void UWUClientSessionSubsystem::CreateClubFromSelectedCharter(const FString& Name, int32 CharterSlotIndex, const FString& CharterItemId)
+{
+	if (!HasSessionContext() || SelectedCharacterId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Login, realm selection, and a selected character are required before creating a club."));
+		return;
+	}
+
+	FString TrimmedName = Name;
+	TrimmedName.TrimStartAndEndInline();
+	if (TrimmedName.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("Club name is required."));
+		return;
+	}
+
+	FString TrimmedItemId = CharterItemId;
+	TrimmedItemId.TrimStartAndEndInline();
+	if (CharterSlotIndex < 0 || TrimmedItemId.IsEmpty())
+	{
+		OnRequestFailed.Broadcast(TEXT("A club charter item is required."));
+		return;
+	}
+
+	TSharedPtr<FJsonObject> RootObject = CreateSessionContextJsonObject();
+	RootObject->SetStringField(TEXT("presidentCharacterId"), SelectedCharacterId);
+	RootObject->SetStringField(TEXT("name"), TrimmedName);
+	RootObject->SetStringField(TEXT("tag"), TEXT(""));
+	RootObject->SetStringField(TEXT("description"), TEXT(""));
+	RootObject->SetNumberField(TEXT("slotIndex"), CharterSlotIndex);
+	RootObject->SetStringField(TEXT("itemId"), TrimmedItemId);
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateAuthorizedRequest(TEXT("POST"), TEXT("/api/clubs/from-charter"));
 	SetJsonBody(Request, RootObject);
 	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleCreateClubResponse);
 	Request->ProcessRequest();
@@ -724,6 +771,7 @@ void UWUClientSessionSubsystem::HandleCreateClubResponse(FHttpRequestPtr Request
 	}
 
 	OnClubCreated.Broadcast(Club);
+	RefreshSelectedInventorySnapshot();
 }
 
 void UWUClientSessionSubsystem::HandleInviteClubMemberResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
@@ -937,6 +985,12 @@ bool UWUClientSessionSubsystem::TryDeserializeObject(FHttpResponsePtr Response, 
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Content);
 	if (!FJsonSerializer::Deserialize(Reader, OutJsonObject) || !OutJsonObject.IsValid())
 	{
+		if (Response->GetResponseCode() == EHttpResponseCodes::NotFound)
+		{
+			OutErrorMessage = TEXT("Backend endpoint was not found. Pull/rebuild the server and restart the API.");
+			return false;
+		}
+
 		OutErrorMessage = FString::Printf(TEXT("Backend returned invalid JSON with HTTP %d."), Response->GetResponseCode());
 		return false;
 	}

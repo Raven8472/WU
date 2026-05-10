@@ -27,6 +27,42 @@ public sealed class ClubService(IClubRepository repository)
         return await repository.CreateAsync(command, cancellationToken);
     }
 
+    public async Task<ClubCreateResult> CreateFromCharterAsync(CreateClubFromCharterRequest request, CancellationToken cancellationToken)
+    {
+        var validationErrors = ValidateCreate(request);
+        if (request.SlotIndex < 0)
+        {
+            validationErrors.Add("slotIndex must be zero or greater.");
+        }
+
+        if (!string.Equals((request.ItemId ?? string.Empty).Trim(), "club_charter", StringComparison.OrdinalIgnoreCase))
+        {
+            validationErrors.Add("itemId must be club_charter.");
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            return ClubCreateResult.Invalid(validationErrors.ToArray());
+        }
+
+        var name = request.Name.Trim();
+        var tag = (request.Tag ?? string.Empty).Trim();
+        var description = (request.Description ?? string.Empty).Trim();
+        var itemId = (request.ItemId ?? string.Empty).Trim();
+
+        var command = new CreateClubCommand(
+            request.AccountId,
+            request.RealmId,
+            request.PresidentCharacterId,
+            name,
+            ClubNameRules.NormalizeName(name),
+            tag,
+            ClubNameRules.NormalizeTag(tag),
+            description);
+
+        return await repository.CreateFromCharterAsync(command, request.SlotIndex, itemId, cancellationToken);
+    }
+
     public async Task<ClubInviteResult> InviteAsync(Guid clubId, InviteClubMemberRequest request, CancellationToken cancellationToken)
     {
         List<string> errors = [];
@@ -82,6 +118,43 @@ public sealed class ClubService(IClubRepository repository)
     }
 
     private static List<string> ValidateCreate(CreateClubRequest request)
+    {
+        List<string> errors = [];
+
+        if (request.AccountId == Guid.Empty)
+        {
+            errors.Add("accountId is required.");
+        }
+
+        if (request.RealmId == Guid.Empty)
+        {
+            errors.Add("realmId is required.");
+        }
+
+        if (request.PresidentCharacterId == Guid.Empty)
+        {
+            errors.Add("presidentCharacterId is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name) || !ClubNameRules.IsValidName(request.Name))
+        {
+            errors.Add($"name must be {ClubNameRules.MinNameLength}-{ClubNameRules.MaxNameLength} characters.");
+        }
+
+        if (!ClubNameRules.IsValidTag(request.Tag))
+        {
+            errors.Add($"tag must be empty or {ClubNameRules.MinTagLength}-{ClubNameRules.MaxTagLength} characters.");
+        }
+
+        if ((request.Description ?? string.Empty).Trim().Length > ClubNameRules.MaxDescriptionLength)
+        {
+            errors.Add($"description must be {ClubNameRules.MaxDescriptionLength} characters or fewer.");
+        }
+
+        return errors;
+    }
+
+    private static List<string> ValidateCreate(CreateClubFromCharterRequest request)
     {
         List<string> errors = [];
 

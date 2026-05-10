@@ -14,6 +14,14 @@ enum class EWUNpcRole : uint8
 	Banker
 };
 
+UENUM(BlueprintType)
+enum class EWUNpcDisposition : uint8
+{
+	Friendly,
+	NeutralEnemy,
+	HostileEnemy
+};
+
 USTRUCT(BlueprintType)
 struct WU_API FWUNpcProfile
 {
@@ -31,10 +39,16 @@ struct WU_API FWUNpcProfile
 	EWUNpcRole Role = EWUNpcRole::Ambient;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC")
+	EWUNpcDisposition Disposition = EWUNpcDisposition::Friendly;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC")
 	FName QuestId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC")
 	FName VendorTableId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Vendor")
+	FText VendorTypeLabel;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC")
 	FText InteractionPrompt;

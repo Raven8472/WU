@@ -25,6 +25,11 @@ public sealed record ClubCreateResult(
         return new ClubCreateResult(ClubCreateStatus.PresidentAlreadyInClub, null, []);
     }
 
+    public static ClubCreateResult CharterNotFound()
+    {
+        return new ClubCreateResult(ClubCreateStatus.CharterNotFound, null, []);
+    }
+
     public static ClubCreateResult NameTaken()
     {
         return new ClubCreateResult(ClubCreateStatus.NameTaken, null, []);
