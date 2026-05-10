@@ -10,17 +10,17 @@ HOLE_MI_NAME = "MI_WU_Landscape_Hole"
 TEXTURE_ROOT = "/Game/AssetPacks/STF/Pack03-LandscapePro/Environment/Landscape/Landscape"
 
 LAYERS = [
-    ("Grass", "T_ground_grass_01_diffuse", 1.0, 140.0),
-    ("DirtPath", "T_ground_dirt_01_diffuse", 0.0, 160.0),
+    ("Grass", "T_ground_grass_01_diffuse", 1.0, 1.0),
+    ("DirtPath", "T_ground_dirt_01_diffuse", 0.0, 1.0),
     (
         "RoughBrickGround",
         "/Game/AssetPacks/MurdocMaterials/RoughBrickGround/Textures/RoughBrickGround_basecolor",
         0.0,
         1.0,
     ),
-    ("ForestFloor", "T_ground_forest_diffuse", 0.0, 90.0),
-    ("Rock", "T_ground_rock_01_diffuse", 0.0, 130.0),
-    ("Mud", "T_ground_dirt_01_diffuse", 0.0, 160.0),
+    ("ForestFloor", "T_ground_forest_diffuse", 0.0, 1.0),
+    ("Rock", "T_ground_rock_01_diffuse", 0.0, 1.0),
+    ("Mud", "T_ground_dirt_01_diffuse", 0.0, 1.0),
 ]
 
 

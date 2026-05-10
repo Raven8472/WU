@@ -78,6 +78,22 @@ DerivedDataCache/*
 __pycache__/
 *.py[cod]
 
+# Imported marketplace/source-art leftovers inside Content.
+# Keep real Unreal packages visible; keep source archives and DCC leftovers out of git noise.
+Content/**/*.zip
+Content/**/*.blend
+Content/**/*.blend1
+Content/**/*.fbx
+Content/**/*.lnk
+Content/**/*.ini
+Content/**/test*.txt
+Content/AssetPacks/CraftResourcesIcons/**/*.png
+Content/CraftResourcesIcons/**/*.png
+
+# Temporary marketplace preview images dropped at the project root
+/MAEBeechForest.png
+/MAEOakForest.png
+
 # WU backend generated files
 Server/**/bin/
 Server/**/obj/
