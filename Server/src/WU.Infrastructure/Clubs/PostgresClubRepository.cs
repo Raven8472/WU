@@ -111,7 +111,14 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
                 return ClubCreateResult.PresidentAlreadyInClub();
             }
 
-            if (!await CharacterHasInventoryItemAsync(connection, transaction, command.PresidentCharacterId, charterSlotIndex, charterItemId, cancellationToken))
+            var consumedCharterSlotIndex = await FindInventoryItemSlotAsync(
+                connection,
+                transaction,
+                command.PresidentCharacterId,
+                charterSlotIndex,
+                charterItemId,
+                cancellationToken);
+            if (!consumedCharterSlotIndex.HasValue)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return ClubCreateResult.CharterNotFound();
@@ -133,7 +140,7 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
             var club = await InsertClubAsync(connection, transaction, command, cancellationToken);
             await InsertDefaultRankPermissionsAsync(connection, transaction, club.ClubId, cancellationToken);
             await InsertClubMemberAsync(connection, transaction, club.ClubId, command.PresidentCharacterId, EWuClubRank.President, cancellationToken);
-            await ConsumeInventoryItemAsync(connection, transaction, command.PresidentCharacterId, charterSlotIndex, charterItemId, cancellationToken);
+            await ConsumeInventoryItemAsync(connection, transaction, command.PresidentCharacterId, consumedCharterSlotIndex.Value, charterItemId, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
 
@@ -470,30 +477,33 @@ public sealed class PostgresClubRepository(NpgsqlDataSource dataSource) : IClubR
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
-    private static async Task<bool> CharacterHasInventoryItemAsync(
+    private static async Task<int?> FindInventoryItemSlotAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         Guid characterId,
-        int slotIndex,
+        int preferredSlotIndex,
         string itemId,
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT 1
+            SELECT slot_index
             FROM character_inventory_items
             WHERE character_id = @character_id
-              AND slot_index = @slot_index
               AND lower(item_id) = lower(@item_id)
+            ORDER BY CASE WHEN slot_index = @preferred_slot_index THEN 0 ELSE 1 END,
+                     slot_index
+            LIMIT 1
             FOR UPDATE;
             """;
 
         await using var command = new NpgsqlCommand(sql, connection);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("character_id", NpgsqlDbType.Uuid, characterId);
-        command.Parameters.AddWithValue("slot_index", NpgsqlDbType.Integer, slotIndex);
+        command.Parameters.AddWithValue("preferred_slot_index", NpgsqlDbType.Integer, preferredSlotIndex);
         command.Parameters.AddWithValue("item_id", NpgsqlDbType.Text, itemId);
 
-        return await command.ExecuteScalarAsync(cancellationToken) is not null;
+        var scalar = await command.ExecuteScalarAsync(cancellationToken);
+        return scalar is null ? null : Convert.ToInt32(scalar);
     }
 
     private static async Task<ClubNameConflict> FindActiveClubConflictAsync(
