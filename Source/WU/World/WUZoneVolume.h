@@ -50,6 +50,8 @@ public:
 	FWUZoneCharacterEvent OnCharacterExitedZone;
 
 protected:
+	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WU|Zone", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBoxComponent> ZoneBounds;
 
@@ -87,6 +89,7 @@ private:
 	void HandleCharacterEntered(AWUCharacter* Character);
 	void HandleCharacterExited(AWUCharacter* Character);
 	void AwardExplorationExperience(AWUCharacter* Character);
+	void RefreshOverlappingCharacters();
 
 	TSet<TWeakObjectPtr<AWUCharacter>> OccupyingCharacters;
 	TSet<TWeakObjectPtr<AWUCharacter>> CharactersAwardedExploration;

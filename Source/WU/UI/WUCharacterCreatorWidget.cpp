@@ -11,6 +11,7 @@
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SNullWidget.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
@@ -40,7 +41,7 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 		[
 			SNew(SBorder)
 			.BorderImage(&PanelBrush)
-			.Padding(FMargin(18.0f, 16.0f))
+			.Padding(FMargin(16.0f, 14.0f))
 			[
 				SNew(SVerticalBox)
 
@@ -56,247 +57,382 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::RebuildWidget()
 				]
 
 				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 14.0f, 0.0f, 6.0f))
-				[
-					CreateHeaderText(LOCTEXT("NameLabel", "Name"))
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				[
-					SAssignNew(NameInputBox, SEditableTextBox)
-					.Text_Lambda([this]()
-					{
-						return FText::FromString(CurrentRequest.CharacterName);
-					})
-					.HintText(LOCTEXT("NameHint", "Character name"))
-					.OnTextChanged_UObject(this, &UWUCharacterCreatorWidget::HandleNameChanged)
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 16.0f, 0.0f, 6.0f))
-				[
-					CreateHeaderText(LOCTEXT("RaceLabel", "Race"))
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				[
-					SNew(SHorizontalBox)
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					[
-						CreateButton(LOCTEXT("Halfblood", "Halfblood"), [this]()
-						{
-							SetRace(EWUCharacterRace::Halfblood);
-							return FReply::Handled();
-						})
-					]
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
-					[
-						CreateButton(LOCTEXT("Pureblood", "Pureblood"), [this]()
-						{
-							SetRace(EWUCharacterRace::Pureblood);
-							return FReply::Handled();
-						})
-					]
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
-					[
-						CreateButton(LOCTEXT("Mudblood", "Mudblood"), [this]()
-						{
-							SetRace(EWUCharacterRace::Mudblood);
-							return FReply::Handled();
-						})
-					]
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 14.0f, 0.0f, 6.0f))
-				[
-					CreateHeaderText(LOCTEXT("SexLabel", "Body"))
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				[
-					SNew(SHorizontalBox)
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					[
-						CreateButton(LOCTEXT("Male", "Male"), [this]()
-						{
-							SetSex(EWUCharacterSex::Male);
-							return FReply::Handled();
-						})
-					]
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
-					[
-						CreateButton(LOCTEXT("Female", "Female"), [this]()
-						{
-							SetSex(EWUCharacterSex::Female);
-							return FReply::Handled();
-						})
-					]
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 18.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
-						LOCTEXT("SkinPreset", "Skin"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							return FText::Format(LOCTEXT("SkinValue", "Preset {0}"), FText::AsNumber(CurrentRequest.SkinPresetIndex + 1));
-						}),
-						[this]() { CycleSkinPreset(-1); },
-						[this]() { CycleSkinPreset(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
-						LOCTEXT("HairStyle", "Hair"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							return FText::Format(LOCTEXT("HairValue", "Style {0}"), FText::AsNumber(CurrentRequest.HairStyleIndex + 1));
-						}),
-						[this]() { CycleHairStyle(-1); },
-						[this]() { CycleHairStyle(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
-						LOCTEXT("HairColor", "Hair Color"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							return FText::Format(LOCTEXT("HairColorValue", "Color {0}"), FText::AsNumber(CurrentRequest.HairColorIndex + 1));
-						}),
-						[this]() { CycleHairColor(-1); },
-						[this]() { CycleHairColor(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
-						LOCTEXT("EyeColor", "Eye Color"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							switch (CurrentRequest.EyeColorIndex)
-							{
-							case 0:
-								return LOCTEXT("EyeColorBlue", "Blue");
-							case 1:
-								return LOCTEXT("EyeColorBrown", "Brown");
-							case 2:
-								return LOCTEXT("EyeColorGreen", "Green");
-							case 3:
-								return LOCTEXT("EyeColorPale", "Pale");
-							default:
-								return LOCTEXT("EyeColorUnknown", "Unknown");
-							}
-						}),
-						[this]() { CycleEyeColor(-1); },
-						[this]() { CycleEyeColor(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
-						LOCTEXT("Brows", "Brows"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							return CurrentRequest.Sex == EWUCharacterSex::Male
-								? FText::Format(LOCTEXT("BrowsValue", "Style {0}"), FText::AsNumber(CurrentRequest.BrowStyleIndex + 1))
-								: LOCTEXT("BrowsUnavailable", "N/A");
-						}),
-						[this]() { CycleBrowStyle(-1); },
-						[this]() { CycleBrowStyle(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
-				[
-					CreateStepperRow(
-						LOCTEXT("Beard", "Beard"),
-						TAttribute<FText>::CreateLambda([this]()
-						{
-							if (CurrentRequest.Sex != EWUCharacterSex::Male)
-							{
-								return LOCTEXT("BeardUnavailable", "N/A");
-							}
-
-							return CurrentRequest.BeardStyleIndex == 0
-								? LOCTEXT("BeardNone", "None")
-								: FText::Format(LOCTEXT("BeardValue", "Style {0}"), FText::AsNumber(CurrentRequest.BeardStyleIndex));
-						}),
-						[this]() { CycleBeardStyle(-1); },
-						[this]() { CycleBeardStyle(1); }
-					)
-				]
-
-				+ SVerticalBox::Slot()
-				.AutoHeight()
-				.Padding(FMargin(0.0f, 18.0f, 0.0f, 0.0f))
-				[
-					SNew(SHorizontalBox)
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					[
-						CreateButton(LOCTEXT("RotateLeft", "Rotate Left"), [this]()
-						{
-							RotatePreview(-20.0f);
-							return FReply::Handled();
-						})
-					]
-
-					+ SHorizontalBox::Slot()
-					.FillWidth(1.0f)
-					.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
-					[
-						CreateButton(LOCTEXT("RotateRight", "Rotate Right"), [this]()
-						{
-							RotatePreview(20.0f);
-							return FReply::Handled();
-						})
-					]
-				]
-
-				+ SVerticalBox::Slot()
 				.FillHeight(1.0f)
+				.Padding(FMargin(0.0f, 12.0f, 0.0f, 12.0f))
 				[
-					SNullWidget::NullWidget
+					SNew(SScrollBox)
+
+					+ SScrollBox::Slot()
+					[
+						SNew(SVerticalBox)
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
+						[
+							CreateHeaderText(LOCTEXT("NameLabel", "Name"))
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						[
+							SAssignNew(NameInputBox, SEditableTextBox)
+							.Text_Lambda([this]()
+							{
+								return FText::FromString(CurrentRequest.CharacterName);
+							})
+							.HintText(LOCTEXT("NameHint", "Character name"))
+							.OnTextChanged_UObject(this, &UWUCharacterCreatorWidget::HandleNameChanged)
+							.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 14.0f, 0.0f, 6.0f))
+						[
+							CreateHeaderText(LOCTEXT("RaceLabel", "Blood Status"))
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						[
+							SNew(SHorizontalBox)
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							[
+								CreateChoiceButton(LOCTEXT("Halfblood", "Half-blood"), [this]()
+								{
+									return CurrentRequest.Race == EWUCharacterRace::Halfblood;
+								}, [this]()
+								{
+									SetRace(EWUCharacterRace::Halfblood);
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("Pureblood", "Pureblood"), [this]()
+								{
+									return CurrentRequest.Race == EWUCharacterRace::Pureblood;
+								}, [this]()
+								{
+									SetRace(EWUCharacterRace::Pureblood);
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("MuggleBorn", "Muggle-born"), [this]()
+								{
+									return CurrentRequest.Race == EWUCharacterRace::Mudblood;
+								}, [this]()
+								{
+									SetRace(EWUCharacterRace::Mudblood);
+									return FReply::Handled();
+								})
+							]
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 16.0f, 0.0f, 6.0f))
+						[
+							CreateHeaderText(LOCTEXT("PathLabel", "Path"))
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						[
+							SNew(SHorizontalBox)
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							[
+								CreateChoiceButton(LOCTEXT("AurorPath", "Auror"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("Auror"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("Auror")));
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("MagizoologistPath", "Magizoologist"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("Magizoologist"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("Magizoologist")));
+									return FReply::Handled();
+								})
+							]
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 6.0f, 0.0f, 0.0f))
+						[
+							SNew(SHorizontalBox)
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							[
+								CreateChoiceButton(LOCTEXT("PhilosopherPath", "Philosopher"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("Philosopher"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("Philosopher")));
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("CurseBreakerPath", "Curse Breaker"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("CurseBreaker"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("CurseBreaker")));
+									return FReply::Handled();
+								})
+							]
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 6.0f, 0.0f, 0.0f))
+						[
+							SNew(SHorizontalBox)
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							[
+								CreateChoiceButton(LOCTEXT("MediwizardPath", "Mediwizard"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("MediwitchMediwizard"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("MediwitchMediwizard")));
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("BlackMarketPath", "Black Market"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("BlackMarket"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("BlackMarket")));
+									return FReply::Handled();
+								})
+							]
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 6.0f, 0.0f, 0.0f))
+						[
+							SNew(SHorizontalBox)
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							[
+								CreateChoiceButton(LOCTEXT("DarkArtsPath", "Dark Arts"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("DarkArts"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("DarkArts")));
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("SeerPath", "Seer"), [this]()
+								{
+									return SelectedPathId == FName(TEXT("Seer"));
+								}, [this]()
+								{
+									SetPath(FName(TEXT("Seer")));
+									return FReply::Handled();
+								})
+							]
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 16.0f, 0.0f, 6.0f))
+						[
+							CreateHeaderText(LOCTEXT("SexLabel", "Body"))
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						[
+							SNew(SHorizontalBox)
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							[
+								CreateChoiceButton(LOCTEXT("Male", "Male"), [this]()
+								{
+									return CurrentRequest.Sex == EWUCharacterSex::Male;
+								}, [this]()
+								{
+									SetSex(EWUCharacterSex::Male);
+									return FReply::Handled();
+								})
+							]
+
+							+ SHorizontalBox::Slot()
+							.FillWidth(1.0f)
+							.Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+							[
+								CreateChoiceButton(LOCTEXT("Female", "Female"), [this]()
+								{
+									return CurrentRequest.Sex == EWUCharacterSex::Female;
+								}, [this]()
+								{
+									SetSex(EWUCharacterSex::Female);
+									return FReply::Handled();
+								})
+							]
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 16.0f, 0.0f, 0.0f))
+						[
+							CreateStepperRow(
+								LOCTEXT("SkinPreset", "Skin"),
+								TAttribute<FText>::CreateLambda([this]()
+								{
+									return FText::Format(LOCTEXT("SkinValue", "Preset {0}"), FText::AsNumber(CurrentRequest.SkinPresetIndex + 1));
+								}),
+								[this]() { CycleSkinPreset(-1); },
+								[this]() { CycleSkinPreset(1); }
+							)
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+						[
+							CreateStepperRow(
+								LOCTEXT("HairStyle", "Hair"),
+								TAttribute<FText>::CreateLambda([this]()
+								{
+									return FText::Format(LOCTEXT("HairValue", "Style {0}"), FText::AsNumber(CurrentRequest.HairStyleIndex + 1));
+								}),
+								[this]() { CycleHairStyle(-1); },
+								[this]() { CycleHairStyle(1); }
+							)
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+						[
+							CreateStepperRow(
+								LOCTEXT("HairColor", "Hair Color"),
+								TAttribute<FText>::CreateLambda([this]()
+								{
+									return FText::Format(LOCTEXT("HairColorValue", "Color {0}"), FText::AsNumber(CurrentRequest.HairColorIndex + 1));
+								}),
+								[this]() { CycleHairColor(-1); },
+								[this]() { CycleHairColor(1); }
+							)
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+						[
+							CreateStepperRow(
+								LOCTEXT("EyeColor", "Eye Color"),
+								TAttribute<FText>::CreateLambda([this]()
+								{
+									switch (CurrentRequest.EyeColorIndex)
+									{
+									case 0:
+										return LOCTEXT("EyeColorBlue", "Blue");
+									case 1:
+										return LOCTEXT("EyeColorBrown", "Brown");
+									case 2:
+										return LOCTEXT("EyeColorGreen", "Green");
+									case 3:
+										return LOCTEXT("EyeColorPale", "Pale");
+									default:
+										return LOCTEXT("EyeColorUnknown", "Unknown");
+									}
+								}),
+								[this]() { CycleEyeColor(-1); },
+								[this]() { CycleEyeColor(1); }
+							)
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+						[
+							CreateStepperRow(
+								LOCTEXT("Brows", "Brows"),
+								TAttribute<FText>::CreateLambda([this]()
+								{
+									return CurrentRequest.Sex == EWUCharacterSex::Male
+										? FText::Format(LOCTEXT("BrowsValue", "Style {0}"), FText::AsNumber(CurrentRequest.BrowStyleIndex + 1))
+										: LOCTEXT("BrowsUnavailable", "N/A");
+								}),
+								[this]() { CycleBrowStyle(-1); },
+								[this]() { CycleBrowStyle(1); }
+							)
+						]
+
+						+ SVerticalBox::Slot()
+						.AutoHeight()
+						.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+						[
+							CreateStepperRow(
+								LOCTEXT("Beard", "Beard"),
+								TAttribute<FText>::CreateLambda([this]()
+								{
+									if (CurrentRequest.Sex != EWUCharacterSex::Male)
+									{
+										return LOCTEXT("BeardUnavailable", "N/A");
+									}
+
+									return CurrentRequest.BeardStyleIndex == 0
+										? LOCTEXT("BeardNone", "None")
+										: FText::Format(LOCTEXT("BeardValue", "Style {0}"), FText::AsNumber(CurrentRequest.BeardStyleIndex));
+								}),
+								[this]() { CycleBeardStyle(-1); },
+								[this]() { CycleBeardStyle(1); }
+							)
+						]
+					]
 				]
 
 				+ SVerticalBox::Slot()
@@ -332,6 +468,11 @@ void UWUCharacterCreatorWidget::ShowCreator()
 {
 	CurrentRequest.SkinPresetIndex = FMath::Clamp(CurrentRequest.SkinPresetIndex, 0, 4);
 	CurrentRequest.HeadPresetIndex = CurrentRequest.SkinPresetIndex;
+	if (SelectedPathId.IsNone())
+	{
+		SelectedPathId = FName(TEXT("Auror"));
+	}
+	CurrentRequest.PathId = SelectedPathId.ToString();
 	bCreatorOpen = true;
 	RefreshPreview();
 	InvalidateLayoutAndVolatility();
@@ -364,6 +505,11 @@ FWUCharacterCreateRequest UWUCharacterCreatorWidget::GetCurrentRequest() const
 	return CurrentRequest;
 }
 
+FName UWUCharacterCreatorWidget::GetSelectedPathId() const
+{
+	return SelectedPathId;
+}
+
 EVisibility UWUCharacterCreatorWidget::GetCreatorVisibility() const
 {
 	return bCreatorOpen ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed;
@@ -387,6 +533,7 @@ void UWUCharacterCreatorWidget::SetRace(EWUCharacterRace NewRace)
 {
 	CurrentRequest.Race = NewRace;
 	RefreshPreview();
+	InvalidateLayoutAndVolatility();
 }
 
 void UWUCharacterCreatorWidget::SetSex(EWUCharacterSex NewSex)
@@ -398,6 +545,14 @@ void UWUCharacterCreatorWidget::SetSex(EWUCharacterSex NewSex)
 	CurrentRequest.BrowStyleIndex = 0;
 	CurrentRequest.BeardStyleIndex = 0;
 	RefreshPreview();
+	InvalidateLayoutAndVolatility();
+}
+
+void UWUCharacterCreatorWidget::SetPath(FName NewPathId)
+{
+	SelectedPathId = NewPathId.IsNone() ? FName(TEXT("Auror")) : NewPathId;
+	CurrentRequest.PathId = SelectedPathId.ToString();
+	InvalidateLayoutAndVolatility();
 }
 
 void UWUCharacterCreatorWidget::CycleSkinPreset(int32 Delta)
@@ -523,6 +678,33 @@ TSharedRef<SWidget> UWUCharacterCreatorWidget::CreateButton(const FText& Text, T
 			.Justification(ETextJustify::Center)
 			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
 			.ColorAndOpacity(ValueColor)
+		];
+}
+
+TSharedRef<SWidget> UWUCharacterCreatorWidget::CreateChoiceButton(const FText& Text, TFunction<bool()> IsSelected, TFunction<FReply()> Handler) const
+{
+	const TSharedRef<TFunction<bool()>> IsSelectedPredicate = MakeShared<TFunction<bool()>>(MoveTemp(IsSelected));
+	const FLinearColor SelectedTint(0.55f, 0.37f, 0.08f, 0.92f);
+	const FLinearColor IdleTint(0.08f, 0.07f, 0.06f, 0.72f);
+	const FLinearColor SelectedText(1.0f, 0.95f, 0.76f, 1.0f);
+	const FLinearColor IdleText(0.86f, 0.82f, 0.74f, 1.0f);
+
+	return SNew(SButton)
+		.OnClicked_Lambda(MoveTemp(Handler))
+		.ContentPadding(FMargin(9.0f, 7.0f))
+		.ButtonColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([IsSelectedPredicate, SelectedTint, IdleTint]()
+		{
+			return (*IsSelectedPredicate)() ? FSlateColor(SelectedTint) : FSlateColor(IdleTint);
+		}))
+		[
+			SNew(STextBlock)
+			.Text(Text)
+			.Justification(ETextJustify::Center)
+			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+			.ColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([IsSelectedPredicate, SelectedText, IdleText]()
+			{
+				return (*IsSelectedPredicate)() ? FSlateColor(SelectedText) : FSlateColor(IdleText);
+			}))
 		];
 }
 

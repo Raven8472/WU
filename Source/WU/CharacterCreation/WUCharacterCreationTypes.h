@@ -65,6 +65,9 @@ struct FWUCharacterCreateRequest
 	EWUCharacterSex Sex = EWUCharacterSex::Male;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
+	FString PathId = TEXT("Auror");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")
 	int32 SkinPresetIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Creation")

@@ -14,6 +14,7 @@ class UInputMappingContext;
 class UInputAction;
 class UUserWidget;
 class AActor;
+class AWUDayNightCycleActor;
 class AWUCharacterCreatorPreviewActor;
 class AWUCharacter;
 class UWUCharacterCreatorWidget;
@@ -27,6 +28,7 @@ class UWUSocialWidget;
 class UWUTargetFrameWidget;
 class UWUVendorWidget;
 class UWUWorldHoverTooltipWidget;
+class UWUWorldClockWidget;
 class UWUZoneNameWidget;
 class AWUNpcCharacter;
 
@@ -135,6 +137,34 @@ protected:
 	/** Viewport size for the zone name readout. */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")
 	FVector2D ZoneNameViewportSize = FVector2D(280.0f, 30.0f);
+
+	/** Native world clock widget shown beneath the minimap. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	TSubclassOf<UWUWorldClockWidget> WorldClockWidgetClass;
+
+	/** Pointer to the native world clock widget. */
+	UPROPERTY()
+	TObjectPtr<UWUWorldClockWidget> WorldClockWidget;
+
+	/** Viewport position for the world clock readout. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D WorldClockViewportPosition = FVector2D(-24.0f, 252.0f);
+
+	/** Viewport size for the world clock readout. */
+	UPROPERTY(EditAnywhere, Category = "UI|HUD")
+	FVector2D WorldClockViewportSize = FVector2D(220.0f, 46.0f);
+
+	/** Day/night cycle actor to spawn when a gameplay level does not already contain one. */
+	UPROPERTY(EditAnywhere, Category = "World Time")
+	TSubclassOf<AWUDayNightCycleActor> DayNightCycleActorClass;
+
+	/** Keeps the server-time lighting cycle active in gameplay levels without manual placement. */
+	UPROPERTY(EditAnywhere, Category = "World Time")
+	bool bAutoSpawnDayNightCycleActor = true;
+
+	/** Local day/night cycle actor used by this client. */
+	UPROPERTY()
+	TObjectPtr<AWUDayNightCycleActor> DayNightCycleActor;
 
 	/** Bottom-right world hover tooltip widget. */
 	UPROPERTY(EditAnywhere, Category = "UI|HUD")

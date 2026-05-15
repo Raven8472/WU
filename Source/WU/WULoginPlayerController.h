@@ -9,6 +9,7 @@
 
 class ASceneCapture2D;
 class AWUCharacterCreatorPreviewActor;
+class AWUCharacterCreatorStage;
 class UWUCharacterSelectWidget;
 class UWULoginScreenWidget;
 class UTextureRenderTarget2D;
@@ -58,6 +59,31 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> CharacterCreatorPreviewRenderTarget;
 
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FIntPoint CharacterCreatorPreviewRenderTargetSize = FIntPoint(2560, 1440);
+
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float CharacterCreatorPreviewSharpen = 0.45f;
+
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation", meta = (ClampMin = "1.0", Units = "s"))
+	float CharacterCreatorPreviewTextureStreamSeconds = 300.0f;
+
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FVector CharacterCreatorPreviewStageLocation = FVector(0.0f, 0.0f, 100.0f);
+
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FRotator CharacterCreatorPreviewStageRotation = FRotator(0.0f, 180.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FVector CharacterCreatorPreviewCameraOffset = FVector(230.0f, -470.0f, 145.0f);
+
+	UPROPERTY(EditAnywhere, Category = "UI|Character Creation")
+	FVector CharacterCreatorPreviewLookAtOffset = FVector(0.0f, 0.0f, 92.0f);
+
+	EWUCharacterRace ActiveCharacterCreatorPreviewRace = EWUCharacterRace::Halfblood;
+
+	bool bHasActiveCharacterCreatorPreviewRace = false;
+
 private:
 	UFUNCTION()
 	void ShowCharacterSelect();
@@ -73,5 +99,8 @@ private:
 	void ApplyMenuInputMode();
 	void SetupCharacterCreatorPreviewRig();
 	AWUCharacterCreatorPreviewActor* EnsureCharacterCreatorPreviewActor();
+	const AWUCharacterCreatorStage* FindCharacterCreatorStage(EWUCharacterRace Race) const;
+	FTransform ResolveCharacterCreatorSpawnTransform(EWUCharacterRace Race) const;
+	void ApplyCharacterCreatorStage(EWUCharacterRace Race, bool bForce = false);
 	void PositionCharacterCreatorPreviewCapture();
 };

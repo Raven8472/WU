@@ -24,8 +24,11 @@
 
 namespace
 {
-	const FLinearColor CharacterSelectPanelTint(0.015f, 0.012f, 0.01f, 0.78f);
+	const FLinearColor CharacterSelectPanelTint(0.015f, 0.012f, 0.01f, 0.62f);
+	const FLinearColor CharacterSelectPanelStrongTint(0.015f, 0.012f, 0.01f, 0.82f);
 	const FLinearColor CharacterSelectGoldText(0.96f, 0.84f, 0.58f, 1.0f);
+	const FLinearColor CharacterSelectMutedText(0.78f, 0.74f, 0.66f, 0.92f);
+	const FLinearColor CharacterSelectSelectedTint(0.58f, 0.43f, 0.12f, 0.72f);
 }
 
 UWUCharacterSelectWidget::UWUCharacterSelectWidget(const FObjectInitializer& ObjectInitializer)
@@ -88,12 +91,12 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 	PanelBrush.DrawAs = ESlateBrushDrawType::Box;
 	PanelBrush.TintColor = FSlateColor(CharacterSelectPanelTint);
 
-	PreviewBrush.SetResourceObject(ResolvePreviewTexture());
+	UTexture* PreviewTexture = ResolvePreviewTexture();
+	PreviewBrush.SetResourceObject(PreviewTexture);
 	PreviewBrush.DrawAs = ESlateBrushDrawType::Image;
-	PreviewBrush.ImageSize = FVector2D(600.0f, 760.0f);
-
-	TSharedRef<SVerticalBox> CharacterList = SNew(SVerticalBox);
-	CharacterListBox = CharacterList;
+	PreviewBrush.ImageSize = PreviewTexture
+		? FVector2D(PreviewTexture->GetSurfaceWidth(), PreviewTexture->GetSurfaceHeight())
+		: FVector2D(1920.0f, 1080.0f);
 
 	TSharedRef<SWidget> Root = SNew(SOverlay)
 		+ SOverlay::Slot()
@@ -103,119 +106,96 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::RebuildWidget()
 		]
 
 		+ SOverlay::Slot()
-		.HAlign(HAlign_Left)
-		.VAlign(VAlign_Center)
-		.Padding(FMargin(90.0f, 0.0f, 0.0f, 0.0f))
 		[
-			CreateCharacterCreatorPanel()
+			SNew(SImage)
+			.Image(&PreviewBrush)
+			.Visibility_Lambda([this]()
+			{
+				return ResolvePreviewTexture() ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+			})
+		]
+
+		+ SOverlay::Slot()
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.22f))
+			.Padding(FMargin(0.0f))
+		]
+
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Left)
+		.VAlign(VAlign_Top)
+		.Padding(FMargin(54.0f, 36.0f, 0.0f, 0.0f))
+		[
+			SNew(SVerticalBox)
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("GameTitle", "WU"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 54))
+				.ColorAndOpacity(CharacterSelectGoldText)
+				.ShadowOffset(FVector2D(2.0f, 2.0f))
+				.ShadowColorAndOpacity(FLinearColor::Black)
+			]
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(FMargin(2.0f, -4.0f, 0.0f, 0.0f))
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("CharacterSelectSubtitle", "Character Selection"))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
+				.ColorAndOpacity(CharacterSelectMutedText)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor::Black)
+			]
 		]
 
 		+ SOverlay::Slot()
 		.HAlign(HAlign_Left)
 		.VAlign(VAlign_Center)
-		.Padding(FMargin(610.0f, 0.0f, 0.0f, 0.0f))
+		.Padding(FMargin(42.0f, 78.0f, 0.0f, 0.0f))
 		[
-			CreateCharacterPreviewPanel()
+			SNew(SBox)
+			.Visibility_UObject(this, &UWUCharacterSelectWidget::GetCreatorModeVisibility)
+			[
+				CreateCharacterCreatorPanel()
+			]
 		]
 
 		+ SOverlay::Slot()
 		.HAlign(HAlign_Right)
 		.VAlign(VAlign_Center)
-		.Padding(FMargin(0.0f, 0.0f, 90.0f, 0.0f))
+		.Padding(FMargin(0.0f, 78.0f, 42.0f, 0.0f))
 		[
 			SNew(SBox)
-			.WidthOverride(500.0f)
-			.HeightOverride(620.0f)
+			.Visibility_UObject(this, &UWUCharacterSelectWidget::GetCreatorModeVisibility)
 			[
-				SNew(SBorder)
-				.BorderImage(&PanelBrush)
-				.Padding(FMargin(24.0f))
-				[
-					SNew(SVerticalBox)
-
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(LOCTEXT("CharacterSelectTitle", "Character Select"))
-						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 30))
-						.ColorAndOpacity(CharacterSelectGoldText)
-						.ShadowOffset(FVector2D(2.0f, 2.0f))
-						.ShadowColorAndOpacity(FLinearColor::Black)
-					]
-
-					+ SVerticalBox::Slot()
-					.FillHeight(1.0f)
-					.Padding(FMargin(0.0f, 22.0f, 0.0f, 16.0f))
-					[
-						SNew(SScrollBox)
-						+ SScrollBox::Slot()
-						[
-							CharacterList
-						]
-					]
-
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(FMargin(0.0f, 0.0f, 0.0f, 8.0f))
-					[
-						SNew(SButton)
-						.ContentPadding(FMargin(12.0f, 9.0f))
-						.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleEnterGameClicked)
-						[
-							SNew(STextBlock)
-							.Text(LOCTEXT("EnterGame", "Enter Game"))
-							.Justification(ETextJustify::Center)
-							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
-						]
-					]
-
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					[
-						SNew(SHorizontalBox)
-
-						+ SHorizontalBox::Slot()
-						.FillWidth(1.0f)
-						[
-							SNew(SButton)
-							.ContentPadding(FMargin(12.0f, 8.0f))
-							.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleCreateClicked)
-							[
-								SNew(STextBlock)
-								.Text(LOCTEXT("CreateCharacter", "Create New"))
-								.Justification(ETextJustify::Center)
-								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-							]
-						]
-
-						+ SHorizontalBox::Slot()
-						.AutoWidth()
-						.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
-						[
-							SNew(SButton)
-							.ContentPadding(FMargin(12.0f, 8.0f))
-							.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleRefreshClicked)
-							[
-								SNew(STextBlock)
-								.Text(LOCTEXT("Refresh", "Refresh"))
-								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-							]
-						]
-					]
-
-					+ SVerticalBox::Slot()
-					.AutoHeight()
-					.Padding(FMargin(0.0f, 14.0f, 0.0f, 0.0f))
-					[
-						SNew(STextBlock)
-						.Text_UObject(this, &UWUCharacterSelectWidget::GetStatusText)
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
-						.ColorAndOpacity(FLinearColor(0.9f, 0.86f, 0.76f, 0.88f))
-						.AutoWrapText(true)
-					]
-				]
+				CreateCreationContextPanel()
 			]
+		]
+
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Right)
+		.VAlign(VAlign_Center)
+		.Padding(FMargin(0.0f, 70.0f, 42.0f, 0.0f))
+		[
+			SNew(SBox)
+			.Visibility_UObject(this, &UWUCharacterSelectWidget::GetSelectPanelVisibility)
+			[
+				CreateCharacterListPanel()
+			]
+		]
+
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Bottom)
+		.Padding(FMargin(0.0f, 0.0f, 0.0f, 34.0f))
+		[
+			CreateBottomCommandBar()
 		];
 
 	RefreshCharacterRows();
@@ -260,8 +240,14 @@ void UWUCharacterSelectWidget::HandleCreatorCreateRequested(const FWUCharacterCr
 {
 	FWUCharacterCreateRequest SanitizedRequest = Request;
 	SanitizedRequest.CharacterName = Request.CharacterName.TrimStartAndEnd();
+	SanitizedRequest.PathId = SanitizedRequest.PathId.TrimStartAndEnd();
 	SanitizedRequest.SkinPresetIndex = FMath::Clamp(SanitizedRequest.SkinPresetIndex, 0, 4);
 	SanitizedRequest.HeadPresetIndex = SanitizedRequest.SkinPresetIndex;
+
+	if (SanitizedRequest.PathId.IsEmpty())
+	{
+		SanitizedRequest.PathId = TEXT("Auror");
+	}
 
 	if (SanitizedRequest.CharacterName.Len() < 3)
 	{
@@ -329,6 +315,24 @@ FReply UWUCharacterSelectWidget::HandleDeleteClicked(FString CharacterId, FStrin
 	return FReply::Handled();
 }
 
+FReply UWUCharacterSelectWidget::HandleDeleteSelectedClicked()
+{
+	const FWUBackendCharacterSummary* SelectedCharacter = GetSelectedCharacter();
+	if (!SelectedCharacter)
+	{
+		StatusText = LOCTEXT("NoSelectedCharacterToDelete", "Select a character before deleting.");
+		return FReply::Handled();
+	}
+
+	return HandleDeleteClicked(SelectedCharacter->CharacterId, SelectedCharacter->Name);
+}
+
+FReply UWUCharacterSelectWidget::HandleChangeRealmClicked()
+{
+	StatusText = LOCTEXT("RealmSelectUnavailable", "Only the local development realm is available.");
+	return FReply::Handled();
+}
+
 FReply UWUCharacterSelectWidget::HandleEnterGameClicked()
 {
 	const UWUClientSessionSubsystem* Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
@@ -348,6 +352,75 @@ FText UWUCharacterSelectWidget::GetStatusText() const
 	return StatusText;
 }
 
+FText UWUCharacterSelectWidget::GetSelectedRealmText() const
+{
+	const UWUClientSessionSubsystem* Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session)
+	{
+		return LOCTEXT("UnknownRealm", "Unknown Realm");
+	}
+
+	const FString& SelectedRealmId = Session->GetSelectedRealmId();
+	for (const FWUBackendRealmSummary& Realm : Session->GetRealms())
+	{
+		if (Realm.RealmId == SelectedRealmId)
+		{
+			return FText::FromString(Realm.DisplayName);
+		}
+	}
+
+	return SelectedRealmId.IsEmpty() ? LOCTEXT("UnknownRealmFallback", "Unknown Realm") : FText::FromString(SelectedRealmId);
+}
+
+FText UWUCharacterSelectWidget::GetSelectedCharacterNameText() const
+{
+	const FWUBackendCharacterSummary* SelectedCharacter = GetSelectedCharacter();
+	return SelectedCharacter ? FText::FromString(SelectedCharacter->Name) : LOCTEXT("NoSelectedCharacterName", "No Character Selected");
+}
+
+FText UWUCharacterSelectWidget::GetSelectedCharacterDetailText() const
+{
+	const FWUBackendCharacterSummary* SelectedCharacter = GetSelectedCharacter();
+	if (!SelectedCharacter)
+	{
+		return LOCTEXT("NoSelectedCharacterDetail", "Create or select a character.");
+	}
+
+	return FText::Format(
+		LOCTEXT("SelectedCharacterDetail", "Level {0} {1}"),
+		FText::AsNumber(SelectedCharacter->Level),
+		GetRaceDisplayText(SelectedCharacter->Race));
+}
+
+FText UWUCharacterSelectWidget::GetSelectedCharacterLocationText() const
+{
+	const FWUBackendCharacterSummary* SelectedCharacter = GetSelectedCharacter();
+	if (!SelectedCharacter)
+	{
+		return FText::GetEmpty();
+	}
+
+	return FText::Format(
+		LOCTEXT("SelectedCharacterLocation", "Last position {0}, {1}, {2}"),
+		FText::AsNumber(FMath::RoundToInt(SelectedCharacter->Location.X)),
+		FText::AsNumber(FMath::RoundToInt(SelectedCharacter->Location.Y)),
+		FText::AsNumber(FMath::RoundToInt(SelectedCharacter->Location.Z)));
+}
+
+EVisibility UWUCharacterSelectWidget::GetSelectPanelVisibility() const
+{
+	return CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen()
+		? EVisibility::Collapsed
+		: EVisibility::SelfHitTestInvisible;
+}
+
+EVisibility UWUCharacterSelectWidget::GetCreatorModeVisibility() const
+{
+	return CharacterCreatorWidget && CharacterCreatorWidget->IsCreatorOpen()
+		? EVisibility::SelfHitTestInvisible
+		: EVisibility::Collapsed;
+}
+
 TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterCreatorPanel()
 {
 	if (!CharacterCreatorWidget && CharacterCreatorWidgetClass && GetOwningPlayer())
@@ -363,25 +436,248 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterCreatorPanel()
 	return CharacterCreatorWidget ? CharacterCreatorWidget->TakeWidget() : SNullWidget::NullWidget;
 }
 
-TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterPreviewPanel()
+TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterListPanel()
 {
 	return SNew(SBox)
-		.WidthOverride(600.0f)
-		.HeightOverride(760.0f)
-		.Visibility_Lambda([this]()
-		{
-			return ShouldShowCharacterPreview()
-				? EVisibility::HitTestInvisible
-				: EVisibility::Collapsed;
-		})
+		.WidthOverride(430.0f)
+		.HeightOverride(720.0f)
 		[
 			SNew(SBorder)
 			.BorderImage(&PanelBrush)
-			.Padding(FMargin(8.0f))
+			.BorderBackgroundColor(CharacterSelectPanelTint)
+			.Padding(FMargin(18.0f, 16.0f))
 			[
-				SNew(SImage)
-				.Image(&PreviewBrush)
+				SNew(SVerticalBox)
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text_UObject(this, &UWUCharacterSelectWidget::GetSelectedRealmText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 24))
+					.Justification(ETextJustify::Center)
+					.ColorAndOpacity(CharacterSelectGoldText)
+					.ShadowOffset(FVector2D(2.0f, 2.0f))
+					.ShadowColorAndOpacity(FLinearColor::Black)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 7.0f, 0.0f, 14.0f))
+				[
+					CreateActionButton(LOCTEXT("ChangeServer", "Change Server"), &UWUCharacterSelectWidget::HandleChangeRealmClicked)
+				]
+
+				+ SVerticalBox::Slot()
+				.FillHeight(1.0f)
+				[
+					SNew(SScrollBox)
+					+ SScrollBox::Slot()
+					[
+						SAssignNew(CharacterListBox, SVerticalBox)
+					]
+				]
 			]
+		];
+}
+
+TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCreationContextPanel()
+{
+	return SNew(SBox)
+		.WidthOverride(390.0f)
+		.HeightOverride(520.0f)
+		[
+			SNew(SBorder)
+			.BorderImage(&PanelBrush)
+			.BorderBackgroundColor(CharacterSelectPanelTint)
+			.Padding(FMargin(18.0f, 16.0f))
+			[
+				SNew(SVerticalBox)
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("CreationIdentityTitle", "Blood Status"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 24))
+					.ColorAndOpacity(CharacterSelectGoldText)
+					.ShadowOffset(FVector2D(2.0f, 2.0f))
+					.ShadowColorAndOpacity(FLinearColor::Black)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 12.0f, 0.0f, 0.0f))
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]()
+					{
+						return CharacterCreatorWidget
+							? GetRaceDisplayText(CharacterCreatorWidget->GetCurrentRequest().Race)
+							: LOCTEXT("FallbackBloodStatus", "Half-blood");
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 18))
+					.ColorAndOpacity(FLinearColor(1.0f, 0.96f, 0.9f, 1.0f))
+					.ShadowOffset(FVector2D(1.0f, 1.0f))
+					.ShadowColorAndOpacity(FLinearColor::Black)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 8.0f, 0.0f, 18.0f))
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]()
+					{
+						return CharacterCreatorWidget
+							? GetRaceDescriptionText(CharacterCreatorWidget->GetCurrentRequest().Race)
+							: FText::GetEmpty();
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+					.ColorAndOpacity(CharacterSelectMutedText)
+					.AutoWrapText(true)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]()
+					{
+						return CharacterCreatorWidget
+							? GetPathDisplayText(CharacterCreatorWidget->GetSelectedPathId())
+							: LOCTEXT("CreationPathTitle", "Path");
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 22))
+					.ColorAndOpacity(CharacterSelectGoldText)
+					.ShadowOffset(FVector2D(2.0f, 2.0f))
+					.ShadowColorAndOpacity(FLinearColor::Black)
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]()
+					{
+						return CharacterCreatorWidget
+							? GetPathDescriptionText(CharacterCreatorWidget->GetSelectedPathId())
+							: LOCTEXT("CreationPathDescription", "Your first path frames early training, social identity, and the sort of trouble your character is likely to find first.");
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+					.ColorAndOpacity(CharacterSelectMutedText)
+					.AutoWrapText(true)
+				]
+			]
+		];
+}
+
+TSharedRef<SWidget> UWUCharacterSelectWidget::CreateBottomCommandBar()
+{
+	return SNew(SBox)
+		.WidthOverride(560.0f)
+		[
+			SNew(SVerticalBox)
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			[
+				SNew(SBox)
+				.Visibility_UObject(this, &UWUCharacterSelectWidget::GetSelectPanelVisibility)
+				[
+					SNew(SVerticalBox)
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					.HAlign(HAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text_UObject(this, &UWUCharacterSelectWidget::GetSelectedCharacterNameText)
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 24))
+						.ColorAndOpacity(CharacterSelectGoldText)
+						.ShadowOffset(FVector2D(2.0f, 2.0f))
+						.ShadowColorAndOpacity(FLinearColor::Black)
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					.HAlign(HAlign_Center)
+					.Padding(FMargin(0.0f, 0.0f, 0.0f, 8.0f))
+					[
+						SNew(STextBlock)
+						.Text_UObject(this, &UWUCharacterSelectWidget::GetSelectedCharacterDetailText)
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+						.ColorAndOpacity(CharacterSelectMutedText)
+						.ShadowOffset(FVector2D(1.0f, 1.0f))
+						.ShadowColorAndOpacity(FLinearColor::Black)
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					[
+						SNew(SHorizontalBox)
+
+						+ SHorizontalBox::Slot()
+						.FillWidth(1.0f)
+						[
+							CreateActionButton(LOCTEXT("EnterWorld", "Enter World"), &UWUCharacterSelectWidget::HandleEnterGameClicked)
+						]
+
+						+ SHorizontalBox::Slot()
+						.FillWidth(1.0f)
+						.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+						[
+							CreateActionButton(LOCTEXT("CreateNew", "Create New"), &UWUCharacterSelectWidget::HandleCreateClicked)
+						]
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					.Padding(FMargin(0.0f, 8.0f, 0.0f, 0.0f))
+					[
+						SNew(SHorizontalBox)
+
+						+ SHorizontalBox::Slot()
+						.FillWidth(1.0f)
+						[
+							CreateActionButton(LOCTEXT("DeleteSelected", "Delete"), &UWUCharacterSelectWidget::HandleDeleteSelectedClicked)
+						]
+
+						+ SHorizontalBox::Slot()
+						.FillWidth(1.0f)
+						.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+						[
+							CreateActionButton(LOCTEXT("RefreshCharacters", "Refresh"), &UWUCharacterSelectWidget::HandleRefreshClicked)
+						]
+					]
+				]
+			]
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Center)
+			.Padding(FMargin(0.0f, 10.0f, 0.0f, 0.0f))
+			[
+				SNew(STextBlock)
+				.Text_UObject(this, &UWUCharacterSelectWidget::GetStatusText)
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
+				.ColorAndOpacity(FLinearColor(0.9f, 0.86f, 0.76f, 0.88f))
+				.AutoWrapText(true)
+			]
+		];
+}
+
+TSharedRef<SWidget> UWUCharacterSelectWidget::CreateActionButton(const FText& Text, FReply(UWUCharacterSelectWidget::*Handler)())
+{
+	return SNew(SButton)
+		.ContentPadding(FMargin(14.0f, 8.0f))
+		.OnClicked_UObject(this, Handler)
+		[
+			SNew(STextBlock)
+			.Text(Text)
+			.Justification(ETextJustify::Center)
+			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
 		];
 }
 
@@ -431,54 +727,43 @@ TSharedRef<SWidget> UWUCharacterSelectWidget::CreateCharacterRow(const FWUBacken
 	const UWUClientSessionSubsystem* Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
 	const bool bSelected = Session && Session->GetSelectedCharacterId() == Character.CharacterId;
 	const FLinearColor RowTint = bSelected
-		? FLinearColor(0.42f, 0.31f, 0.12f, 0.84f)
-		: FLinearColor(0.05f, 0.04f, 0.035f, 0.72f);
+		? CharacterSelectSelectedTint
+		: FLinearColor(0.02f, 0.018f, 0.015f, 0.52f);
 
-	return SNew(SBorder)
-		.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
-		.BorderBackgroundColor(RowTint)
-		.Padding(FMargin(12.0f, 10.0f))
+	return SNew(SButton)
+		.ButtonColorAndOpacity(RowTint)
+		.ContentPadding(FMargin(0.0f))
+		.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleSelectClicked, Character.CharacterId)
 		[
-			SNew(SHorizontalBox)
-
-			+ SHorizontalBox::Slot()
-			.FillWidth(1.0f)
-			.VAlign(VAlign_Center)
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(RowTint)
+			.Padding(FMargin(12.0f, 9.0f))
 			[
-				SNew(STextBlock)
-				.Text(FText::Format(
-					LOCTEXT("CharacterRow", "{0}  Level {1}  {2}"),
-					FText::FromString(Character.Name),
-					FText::AsNumber(Character.Level),
-					FText::FromString(WUCharacterCreation::RaceToString(Character.Race))))
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-				.ColorAndOpacity(CharacterSelectGoldText)
-			]
+				SNew(SVerticalBox)
 
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			[
-				SNew(SButton)
-				.ContentPadding(FMargin(10.0f, 6.0f))
-				.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleSelectClicked, Character.CharacterId)
+				+ SVerticalBox::Slot()
+				.AutoHeight()
 				[
 					SNew(STextBlock)
-					.Text(bSelected ? LOCTEXT("Selected", "Selected") : LOCTEXT("Select", "Select"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+					.Text(FText::FromString(Character.Name))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+					.ColorAndOpacity(CharacterSelectGoldText)
+					.ShadowOffset(FVector2D(1.0f, 1.0f))
+					.ShadowColorAndOpacity(FLinearColor::Black)
 				]
-			]
 
-			+ SHorizontalBox::Slot()
-			.AutoWidth()
-			.Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
-			[
-				SNew(SButton)
-				.ContentPadding(FMargin(10.0f, 6.0f))
-				.OnClicked_UObject(this, &UWUCharacterSelectWidget::HandleDeleteClicked, Character.CharacterId, Character.Name)
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))
 				[
 					SNew(STextBlock)
-					.Text(LOCTEXT("Delete", "Delete"))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+					.Text(FText::Format(
+						LOCTEXT("CharacterRowDetail", "Level {0} {1}"),
+						FText::AsNumber(Character.Level),
+						GetRaceDisplayText(Character.Race)))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
+					.ColorAndOpacity(CharacterSelectMutedText)
 				]
 			]
 		];
@@ -545,10 +830,137 @@ bool UWUCharacterSelectWidget::ShouldShowCharacterPreview() const
 	return ResolvePreviewTexture() && (bCreatorPreviewOpen || bHasSelectedCharacterPreview);
 }
 
+const FWUBackendCharacterSummary* UWUCharacterSelectWidget::GetSelectedCharacter() const
+{
+	const UWUClientSessionSubsystem* Session = GetGameInstance() ? GetGameInstance()->GetSubsystem<UWUClientSessionSubsystem>() : nullptr;
+	if (!Session || Session->GetSelectedCharacterId().IsEmpty())
+	{
+		return nullptr;
+	}
+
+	for (const FWUBackendCharacterSummary& Character : Session->GetCharacters())
+	{
+		if (Character.CharacterId == Session->GetSelectedCharacterId())
+		{
+			return &Character;
+		}
+	}
+
+	return nullptr;
+}
+
 UTexture* UWUCharacterSelectWidget::ResolvePreviewTexture() const
 {
 	const AWULoginPlayerController* LoginPC = Cast<AWULoginPlayerController>(GetOwningPlayer());
 	return LoginPC ? LoginPC->GetCharacterCreatorPreviewRenderTarget() : nullptr;
+}
+
+FText UWUCharacterSelectWidget::GetRaceDisplayText(EWUCharacterRace Race) const
+{
+	switch (Race)
+	{
+	case EWUCharacterRace::Pureblood:
+		return LOCTEXT("RaceDisplayPureblood", "Pureblood");
+	case EWUCharacterRace::Mudblood:
+		return LOCTEXT("RaceDisplayMuggleBorn", "Muggle-born");
+	case EWUCharacterRace::Halfblood:
+	default:
+		return LOCTEXT("RaceDisplayHalfblood", "Half-blood");
+	}
+}
+
+FText UWUCharacterSelectWidget::GetRaceDescriptionText(EWUCharacterRace Race) const
+{
+	switch (Race)
+	{
+	case EWUCharacterRace::Pureblood:
+		return LOCTEXT("RaceDescriptionPureblood", "Born into long-standing magical families and raised with deep knowledge of wizarding traditions, heritage, pride, and expectation.");
+	case EWUCharacterRace::Mudblood:
+		return LOCTEXT("RaceDescriptionMuggleBorn", "Born to a non-magical family and entering the wizarding world with curiosity, determination, resilience, learning, and discovery.");
+	case EWUCharacterRace::Halfblood:
+	default:
+		return LOCTEXT("RaceDescriptionHalfblood", "Bridging magical and non-magical ancestry, with a broader perspective and the adaptability to move between worlds.");
+	}
+}
+
+FText UWUCharacterSelectWidget::GetPathDisplayText(FName PathId) const
+{
+	if (PathId == FName(TEXT("Magizoologist")))
+	{
+		return LOCTEXT("SelectPathMagizoologist", "Path of the Magizoologist");
+	}
+
+	if (PathId == FName(TEXT("Philosopher")))
+	{
+		return LOCTEXT("SelectPathPhilosopher", "Path of the Philosopher");
+	}
+
+	if (PathId == FName(TEXT("CurseBreaker")))
+	{
+		return LOCTEXT("SelectPathCurseBreaker", "Path of the Curse Breaker");
+	}
+
+	if (PathId == FName(TEXT("MediwitchMediwizard")))
+	{
+		return LOCTEXT("SelectPathMediwitch", "Path of the Mediwitch / Mediwizard");
+	}
+
+	if (PathId == FName(TEXT("BlackMarket")))
+	{
+		return LOCTEXT("SelectPathBlackMarket", "Path of the Black Market");
+	}
+
+	if (PathId == FName(TEXT("DarkArts")))
+	{
+		return LOCTEXT("SelectPathDarkArts", "Path of the Dark Arts");
+	}
+
+	if (PathId == FName(TEXT("Seer")))
+	{
+		return LOCTEXT("SelectPathSeer", "Path of the Seer");
+	}
+
+	return LOCTEXT("SelectPathAuror", "Path of the Auror");
+}
+
+FText UWUCharacterSelectWidget::GetPathDescriptionText(FName PathId) const
+{
+	if (PathId == FName(TEXT("Magizoologist")))
+	{
+		return LOCTEXT("SelectPathMagizoologistDescription", "Caretakers and trackers of magical creatures, drawn beyond safe civilization to understand, rescue, and protect magical beasts.");
+	}
+
+	if (PathId == FName(TEXT("Philosopher")))
+	{
+		return LOCTEXT("SelectPathPhilosopherDescription", "Masters of magical theory, potions, alchemy, and experimentation who search for the hidden rules beneath magic.");
+	}
+
+	if (PathId == FName(TEXT("CurseBreaker")))
+	{
+		return LOCTEXT("SelectPathCurseBreakerDescription", "Explorers of ruins, tombs, forbidden places, ancient traps, and artifacts that demand both wit and nerve.");
+	}
+
+	if (PathId == FName(TEXT("MediwitchMediwizard")))
+	{
+		return LOCTEXT("SelectPathMediwitchDescription", "Healers and restorers who stand between magical injuries, curses, and the fragile line between life and death.");
+	}
+
+	if (PathId == FName(TEXT("BlackMarket")))
+	{
+		return LOCTEXT("SelectPathBlackMarketDescription", "Dealers in questionable goods, dubious artifacts, risky opportunities, and decisions where trust is always in short supply.");
+	}
+
+	if (PathId == FName(TEXT("DarkArts")))
+	{
+		return LOCTEXT("SelectPathDarkArtsDescription", "Students of forbidden and dangerous magic, drawn toward power, secrecy, temptation, and consequence.");
+	}
+
+	if (PathId == FName(TEXT("Seer")))
+	{
+		return LOCTEXT("SelectPathSeerDescription", "Interpreters of fate, prophecy, divination, and hidden truths that are rarely clear until it is too late.");
+	}
+
+	return LOCTEXT("SelectPathAurorDescription", "Defenders trained to confront dangerous magic and pursue justice where threats hide in plain sight.");
 }
 
 UTexture2D* UWUCharacterSelectWidget::ResolveBackgroundTexture()

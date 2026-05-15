@@ -28,8 +28,10 @@
 #include "UI/WUSocialWidget.h"
 #include "UI/WUTargetFrameWidget.h"
 #include "UI/WUVendorWidget.h"
+#include "UI/WUWorldClockWidget.h"
 #include "UI/WUWorldHoverTooltipWidget.h"
 #include "UI/WUZoneNameWidget.h"
+#include "World/WUDayNightCycleActor.h"
 #include "WU.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
@@ -83,7 +85,9 @@ AWUPlayerController::AWUPlayerController()
 	TargetFrameWidgetClass = UWUTargetFrameWidget::StaticClass();
 	VendorWidgetClass = UWUVendorWidget::StaticClass();
 	WorldHoverTooltipWidgetClass = UWUWorldHoverTooltipWidget::StaticClass();
+	WorldClockWidgetClass = UWUWorldClockWidget::StaticClass();
 	ZoneNameWidgetClass = UWUZoneNameWidget::StaticClass();
+	DayNightCycleActorClass = AWUDayNightCycleActor::StaticClass();
 }
 
 void AWUPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -166,6 +170,51 @@ void AWUPlayerController::BeginPlay()
 		{
 			ZoneNameWidget->AddToPlayerScreen(7);
 			ApplyViewportUnitFrameSlot(ZoneNameWidget, ZoneNameViewportSize, ZoneNameViewportPosition, FAnchors(1.0f, 0.0f), FVector2D(1.0f, 0.0f));
+		}
+	}
+
+	if (!WorldClockWidgetClass)
+	{
+		WorldClockWidgetClass = UWUWorldClockWidget::StaticClass();
+	}
+
+	if (IsLocalPlayerController() && WorldClockWidgetClass)
+	{
+		WorldClockWidget = CreateWidget<UWUWorldClockWidget>(this, WorldClockWidgetClass);
+
+		if (WorldClockWidget)
+		{
+			WorldClockWidget->AddToPlayerScreen(7);
+			ApplyViewportUnitFrameSlot(WorldClockWidget, WorldClockViewportSize, WorldClockViewportPosition, FAnchors(1.0f, 0.0f), FVector2D(1.0f, 0.0f));
+		}
+	}
+
+	if (IsLocalPlayerController() && bAutoSpawnDayNightCycleActor)
+	{
+		if (!DayNightCycleActorClass)
+		{
+			DayNightCycleActorClass = AWUDayNightCycleActor::StaticClass();
+		}
+
+		if (UWorld* World = GetWorld())
+		{
+			for (TActorIterator<AWUDayNightCycleActor> It(World); It; ++It)
+			{
+				DayNightCycleActor = *It;
+				break;
+			}
+
+			if (!DayNightCycleActor && DayNightCycleActorClass)
+			{
+				FActorSpawnParameters SpawnParameters;
+				SpawnParameters.Owner = this;
+				SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				DayNightCycleActor = World->SpawnActor<AWUDayNightCycleActor>(
+					DayNightCycleActorClass,
+					FVector::ZeroVector,
+					FRotator::ZeroRotator,
+					SpawnParameters);
+			}
 		}
 	}
 

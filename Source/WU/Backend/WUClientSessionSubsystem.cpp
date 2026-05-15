@@ -7,6 +7,8 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #include "WU.h"
 
 FVector FWUBackendCharacterLocation::ToVector() const
@@ -28,14 +30,27 @@ FText FWUBackendCurrencyBreakdown::ToDisplayText() const
 		FText::AsNumber(Knuts));
 }
 
+FText FWUWorldTimeSnapshot::ToClockText() const
+{
+	return WorldClock.IsEmpty()
+		? FText::GetEmpty()
+		: FText::FromString(WorldClock);
+}
+
 void UWUClientSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	BackendBaseUrl.TrimStartAndEndInline();
+	SyncWorldTime();
 }
 
 void UWUClientSessionSubsystem::Deinitialize()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(WorldTimeSyncTimerHandle);
+	}
+
 	ClearSession();
 	Super::Deinitialize();
 }
@@ -90,6 +105,7 @@ void UWUClientSessionSubsystem::CreateCharacter(const FWUCharacterCreateRequest&
 	RootObject->SetStringField(TEXT("name"), RequestData.CharacterName);
 	RootObject->SetStringField(TEXT("race"), WUCharacterCreation::RaceToString(RequestData.Race));
 	RootObject->SetStringField(TEXT("sex"), WUCharacterCreation::SexToString(RequestData.Sex));
+	RootObject->SetStringField(TEXT("path"), RequestData.PathId);
 
 	TSharedPtr<FJsonObject> AppearanceObject = MakeShared<FJsonObject>();
 	AppearanceObject->SetNumberField(TEXT("skinPresetIndex"), RequestData.SkinPresetIndex);
@@ -456,6 +472,30 @@ void UWUClientSessionSubsystem::PurchaseSelectedVendorItem(const FString& Vendor
 	Request->ProcessRequest();
 }
 
+void UWUClientSessionSubsystem::SyncWorldTime()
+{
+	if (WorldTimeSyncIntervalSeconds > 0.0f)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			FTimerManager& TimerManager = World->GetTimerManager();
+			if (!TimerManager.IsTimerActive(WorldTimeSyncTimerHandle))
+			{
+				TimerManager.SetTimer(
+					WorldTimeSyncTimerHandle,
+					this,
+					&UWUClientSessionSubsystem::SyncWorldTime,
+					WorldTimeSyncIntervalSeconds,
+					true);
+			}
+		}
+	}
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = CreateRequest(TEXT("GET"), TEXT("/api/world/time"));
+	Request->OnProcessRequestComplete().BindUObject(this, &UWUClientSessionSubsystem::HandleWorldTimeResponse);
+	Request->ProcessRequest();
+}
+
 void UWUClientSessionSubsystem::ClearSession()
 {
 	AccessToken.Reset();
@@ -535,6 +575,49 @@ const FWUBackendInventorySnapshot& UWUClientSessionSubsystem::GetInventorySnapsh
 bool UWUClientSessionSubsystem::HasInventorySnapshot() const
 {
 	return bHasInventorySnapshot;
+}
+
+const FWUWorldTimeSnapshot& UWUClientSessionSubsystem::GetWorldTimeSnapshot() const
+{
+	return WorldTimeSnapshot;
+}
+
+bool UWUClientSessionSubsystem::HasWorldTimeSnapshot() const
+{
+	return bHasWorldTimeSnapshot;
+}
+
+float UWUClientSessionSubsystem::GetEstimatedWorldDayProgress() const
+{
+	const float DayLengthSeconds = bHasWorldTimeSnapshot
+		? FMath::Max(1.0f, WorldTimeSnapshot.WorldDayLengthSeconds)
+		: 86400.0f;
+
+	double SecondsOfDay = 0.0;
+	if (bHasWorldTimeSnapshot)
+	{
+		const double ElapsedSeconds = FMath::Max(0.0, FPlatformTime::Seconds() - WorldTimeSnapshotReceivedSeconds);
+		SecondsOfDay = WorldTimeSnapshot.WorldSecondsOfDay + ElapsedSeconds;
+	}
+	else
+	{
+		SecondsOfDay = FDateTime::Now().GetTimeOfDay().GetTotalSeconds();
+	}
+
+	const double WrappedSeconds = FMath::Fmod(SecondsOfDay, static_cast<double>(DayLengthSeconds));
+	return static_cast<float>(WrappedSeconds < 0.0 ? WrappedSeconds + DayLengthSeconds : WrappedSeconds) / DayLengthSeconds;
+}
+
+FText UWUClientSessionSubsystem::GetEstimatedWorldClockText() const
+{
+	const float DayLengthSeconds = bHasWorldTimeSnapshot
+		? FMath::Max(1.0f, WorldTimeSnapshot.WorldDayLengthSeconds)
+		: 86400.0f;
+	const float Progress = GetEstimatedWorldDayProgress();
+	const int32 TotalMinutes = FMath::FloorToInt(Progress * DayLengthSeconds / 60.0f) % (24 * 60);
+	const int32 Hours = TotalMinutes / 60;
+	const int32 Minutes = TotalMinutes % 60;
+	return FText::FromString(FString::Printf(TEXT("%02d:%02d"), Hours, Minutes));
 }
 
 void UWUClientSessionSubsystem::HandleDevLoginResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
@@ -1003,6 +1086,32 @@ void UWUClientSessionSubsystem::HandlePurchaseVendorItemResponse(FHttpRequestPtr
 		OnInventorySnapshotLoaded.Broadcast(InventorySnapshot);
 	}
 	OnVendorPurchaseCompleted.Broadcast(Purchase);
+}
+
+void UWUClientSessionSubsystem::HandleWorldTimeResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded)
+{
+	TSharedPtr<FJsonObject> RootObject;
+	FString ErrorMessage;
+	if (!bSucceeded || !TryDeserializeObject(Response, RootObject, ErrorMessage))
+	{
+		return;
+	}
+
+	if (!EHttpResponseCodes::IsOk(Response->GetResponseCode()))
+	{
+		return;
+	}
+
+	FWUWorldTimeSnapshot NewSnapshot;
+	if (!TryParseWorldTime(RootObject, NewSnapshot))
+	{
+		return;
+	}
+
+	WorldTimeSnapshot = NewSnapshot;
+	bHasWorldTimeSnapshot = true;
+	WorldTimeSnapshotReceivedSeconds = FPlatformTime::Seconds();
+	OnWorldTimeSynced.Broadcast(WorldTimeSnapshot);
 }
 
 TSharedRef<IHttpRequest, ESPMode::ThreadSafe> UWUClientSessionSubsystem::CreateRequest(const FString& Verb, const FString& Path) const
@@ -1536,6 +1645,46 @@ bool UWUClientSessionSubsystem::TryParseLocation(const TSharedPtr<FJsonObject>& 
 	OutLocation.Y = static_cast<float>(Y);
 	OutLocation.Z = static_cast<float>(Z);
 	return true;
+}
+
+bool UWUClientSessionSubsystem::TryParseWorldTime(const TSharedPtr<FJsonObject>& JsonObject, FWUWorldTimeSnapshot& OutSnapshot)
+{
+	if (!JsonObject.IsValid())
+	{
+		return false;
+	}
+
+	FString UtcValue;
+	FString ServerLocalValue;
+	double WorldDayProgress = 0.0;
+	double WorldSecondsOfDay = 0.0;
+	double WorldDayLengthSeconds = 86400.0;
+	if (!JsonObject->TryGetStringField(TEXT("utc"), UtcValue)
+		|| !JsonObject->TryGetStringField(TEXT("serverLocal"), ServerLocalValue)
+		|| !JsonObject->TryGetStringField(TEXT("serverTimeZoneId"), OutSnapshot.ServerTimeZoneId)
+		|| !JsonObject->TryGetStringField(TEXT("serverTimeZoneDisplayName"), OutSnapshot.ServerTimeZoneDisplayName)
+		|| !JsonObject->TryGetNumberField(TEXT("worldDayProgress"), WorldDayProgress)
+		|| !JsonObject->TryGetNumberField(TEXT("worldSecondsOfDay"), WorldSecondsOfDay))
+	{
+		return false;
+	}
+
+	if (!TryParseDateTimeUtc(UtcValue, OutSnapshot.Utc) || !TryParseDateTimeUtc(ServerLocalValue, OutSnapshot.ServerLocal))
+	{
+		return false;
+	}
+
+	JsonObject->TryGetNumberField(TEXT("worldDayLengthSeconds"), WorldDayLengthSeconds);
+	JsonObject->TryGetStringField(TEXT("worldClock"), OutSnapshot.WorldClock);
+
+	OutSnapshot.WorldDayProgress = FMath::Clamp(static_cast<float>(WorldDayProgress), 0.0f, 1.0f);
+	OutSnapshot.WorldDayLengthSeconds = FMath::Max(1.0f, static_cast<float>(WorldDayLengthSeconds));
+	OutSnapshot.WorldSecondsOfDay = FMath::Clamp(
+		static_cast<float>(WorldSecondsOfDay),
+		0.0f,
+		OutSnapshot.WorldDayLengthSeconds);
+
+	return !OutSnapshot.WorldClock.IsEmpty();
 }
 
 bool UWUClientSessionSubsystem::TryParseRace(const FString& Value, EWUCharacterRace& OutRace)

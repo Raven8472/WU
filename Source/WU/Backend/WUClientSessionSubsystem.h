@@ -236,6 +236,38 @@ struct FWUBackendVendorPurchase
 	FWUBackendInventorySnapshot Inventory;
 };
 
+USTRUCT(BlueprintType)
+struct FWUWorldTimeSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	FDateTime Utc;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	FDateTime ServerLocal;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	FString ServerTimeZoneId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	FString ServerTimeZoneDisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	float WorldDayProgress = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	float WorldSecondsOfDay = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	float WorldDayLengthSeconds = 86400.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "WU|World")
+	FString WorldClock;
+
+	FText ToClockText() const;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWUClientSessionSimpleSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionErrorSignature, const FString&, ErrorMessage);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCharactersSignature, const TArray<FWUBackendCharacterSummary>&, Characters);
@@ -248,6 +280,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionClubMembersSignature
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionCurrencySnapshotSignature, const FWUBackendCurrencySnapshot&, Snapshot);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionInventorySnapshotSignature, const FWUBackendInventorySnapshot&, Snapshot);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionVendorPurchaseSignature, const FWUBackendVendorPurchase&, Purchase);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FWUClientSessionWorldTimeSignature, const FWUWorldTimeSnapshot&, Snapshot);
 
 /**
  * Client-side bridge to the WU persistence backend.
@@ -300,6 +333,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Vendor")
 	FWUClientSessionVendorPurchaseSignature OnVendorPurchaseCompleted;
+
+	UPROPERTY(BlueprintAssignable, Category = "WU|World")
+	FWUClientSessionWorldTimeSignature OnWorldTimeSynced;
 
 	UPROPERTY(BlueprintAssignable, Category = "WU|Session")
 	FWUClientSessionErrorSignature OnRequestFailed;
@@ -354,6 +390,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WU|Vendor")
 	void PurchaseSelectedVendorItem(const FString& VendorTableId, const FString& ItemId);
 
+	UFUNCTION(BlueprintCallable, Category = "WU|World")
+	void SyncWorldTime();
+
 	UFUNCTION(BlueprintCallable, Category = "WU|Session")
 	void ClearSession();
 
@@ -396,9 +435,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "WU|Inventory")
 	bool HasInventorySnapshot() const;
 
+	UFUNCTION(BlueprintPure, Category = "WU|World")
+	const FWUWorldTimeSnapshot& GetWorldTimeSnapshot() const;
+
+	UFUNCTION(BlueprintPure, Category = "WU|World")
+	bool HasWorldTimeSnapshot() const;
+
+	UFUNCTION(BlueprintPure, Category = "WU|World")
+	float GetEstimatedWorldDayProgress() const;
+
+	UFUNCTION(BlueprintPure, Category = "WU|World")
+	FText GetEstimatedWorldClockText() const;
+
 protected:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "WU|Session")
 	FString BackendBaseUrl = TEXT("http://127.0.0.1:5080");
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "WU|World", meta = (ClampMin = 5.0f, Units = "s"))
+	float WorldTimeSyncIntervalSeconds = 300.0f;
 
 private:
 	void HandleDevLoginResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
@@ -415,6 +469,7 @@ private:
 	void HandleRefreshCurrencySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandleRefreshInventorySnapshotResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 	void HandlePurchaseVendorItemResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
+	void HandleWorldTimeResponse(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSucceeded);
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateRequest(const FString& Verb, const FString& Path) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> CreateAuthorizedRequest(const FString& Verb, const FString& Path) const;
@@ -440,6 +495,7 @@ private:
 	static bool TryParseCurrencyWallet(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyWallet& OutWallet);
 	static bool TryParseCurrencyBreakdown(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCurrencyBreakdown& OutBalance);
 	static bool TryParseLocation(const TSharedPtr<FJsonObject>& JsonObject, FWUBackendCharacterLocation& OutLocation);
+	static bool TryParseWorldTime(const TSharedPtr<FJsonObject>& JsonObject, FWUWorldTimeSnapshot& OutSnapshot);
 	static bool TryParseRace(const FString& Value, EWUCharacterRace& OutRace);
 	static bool TryParseSex(const FString& Value, EWUCharacterSex& OutSex);
 	static bool TryParseHouseFaction(const FString& Value, EWUHouseFaction& OutHouseFaction);
@@ -461,5 +517,9 @@ private:
 	bool bHasCurrencySnapshot = false;
 	FWUBackendInventorySnapshot InventorySnapshot;
 	bool bHasInventorySnapshot = false;
+	FWUWorldTimeSnapshot WorldTimeSnapshot;
+	bool bHasWorldTimeSnapshot = false;
+	double WorldTimeSnapshotReceivedSeconds = 0.0;
+	FTimerHandle WorldTimeSyncTimerHandle;
 	FString PendingClubKickCharacterId;
 };

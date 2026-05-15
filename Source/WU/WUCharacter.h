@@ -13,15 +13,13 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
-class UAnimationAsset;
-class UMaterialInterface;
-class USkeletalMesh;
 class USkeletalMeshComponent;
 class UTexture2D;
 class UUserWidget;
 class UWidgetComponent;
 class AActor;
 class UWUOverheadNameWidget;
+class UWUOverheadNameVisibilityComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -46,6 +44,10 @@ class WU_API AWUCharacter : public ACharacter
 	/** Screen-space name label shown above the character. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UWidgetComponent> OverheadNameComponent;
+
+	/** Local client visibility rules for the overhead name label. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UWUOverheadNameVisibilityComponent> OverheadNameVisibilityComponent;
 
 protected:
 
@@ -494,11 +496,6 @@ public:
 	bool HasRenderedFullBodyReplacementVisuals() const;
 	bool IsItemVisualLayerEquipped(EWUItemVisualLayer VisualLayer) const;
 	bool IsItemVisualLayerRenderable(EWUItemVisualLayer VisualLayer) const;
-	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
-	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
-	UTexture2D* LoadTextureForPath(const TCHAR* AssetPath) const;
-	UAnimationAsset* LoadAnimationAssetForPath(const TCHAR* AssetPath) const;
-	UClass* LoadAnimClassForPath(const TCHAR* AssetPath) const;
 	void ApplyCharacterProgressionInternal(EWUCharacterRace NewBloodStatus, int32 NewLevel, int32 NewExperience, bool bResetResources);
 
 	UFUNCTION(Server, Reliable)
@@ -578,6 +575,7 @@ protected:
 	void BeginTurnInPlace(float YawDeltaDegrees);
 	void EndTurnInPlace(bool bForce = false);
 	void RestoreDefaultLocomotionAnimation();
+	void ApplyExperienceAwardInternal(int32 Amount, EWUExperienceSource Source, const FString& SourceKey);
 	bool IsGameplayMouseInputAllowed() const;
 	bool IsMouseCameraOrbitActive() const;
 	bool IsMouseFacingControlActive() const;

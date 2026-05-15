@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/BrushComponent.h"
 #include "Engine/Engine.h"
+#include "TimerManager.h"
 #include "WUCharacter.h"
 
 AWUZoneVolume::AWUZoneVolume()
@@ -36,6 +37,14 @@ AWUZoneVolume::AWUZoneVolume()
 
 	ZoneBounds->OnComponentBeginOverlap.AddDynamic(this, &AWUZoneVolume::OnZoneBoundsBeginOverlap);
 	ZoneBounds->OnComponentEndOverlap.AddDynamic(this, &AWUZoneVolume::OnZoneBoundsEndOverlap);
+}
+
+void AWUZoneVolume::BeginPlay()
+{
+	Super::BeginPlay();
+
+	RefreshOverlappingCharacters();
+	GetWorldTimerManager().SetTimerForNextTick(this, &AWUZoneVolume::RefreshOverlappingCharacters);
 }
 
 void AWUZoneVolume::OnZoneBoundsBeginOverlap(
@@ -137,7 +146,7 @@ void AWUZoneVolume::HandleCharacterExited(AWUCharacter* Character)
 
 void AWUZoneVolume::AwardExplorationExperience(AWUCharacter* Character)
 {
-	if (!Character || !ShouldAwardExplorationExperience() || !Character->HasAuthority())
+	if (!Character || ZoneId.IsNone() || !ShouldAwardExplorationExperience() || !Character->HasAuthority())
 	{
 		return;
 	}
@@ -156,5 +165,23 @@ void AWUZoneVolume::AwardExplorationExperience(AWUCharacter* Character)
 			*ZoneId.ToString(),
 			*GetNameSafe(Character),
 			ExplorationExperience);
+	}
+}
+
+void AWUZoneVolume::RefreshOverlappingCharacters()
+{
+	if (!ZoneBounds)
+	{
+		return;
+	}
+
+	TArray<AActor*> OverlappingActors;
+	ZoneBounds->GetOverlappingActors(OverlappingActors, AWUCharacter::StaticClass());
+	for (AActor* OverlappingActor : OverlappingActors)
+	{
+		if (AWUCharacter* Character = Cast<AWUCharacter>(OverlappingActor))
+		{
+			HandleCharacterEntered(Character);
+		}
 	}
 }

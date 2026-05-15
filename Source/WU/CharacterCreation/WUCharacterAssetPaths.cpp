@@ -277,6 +277,13 @@ const TCHAR* FWUCharacterAssetPaths::AnimationBlueprint(EWUCharacterSex Sex)
 		: WU_STYLIZED_CHARACTER_PATH("/Animations/Character/Human/Male/ABP_Hu_M.ABP_Hu_M_C");
 }
 
+const TCHAR* FWUCharacterAssetPaths::IdleAnimation(EWUCharacterSex Sex)
+{
+	return Sex == EWUCharacterSex::Female
+		? WU_STYLIZED_CHARACTER_PATH("/Animations/Character/Human/Female/A_Hu_F_idle.A_Hu_F_idle")
+		: WU_STYLIZED_CHARACTER_PATH("/Animations/Character/Human/Male/A_Hu_M_idle.A_Hu_M_idle");
+}
+
 const TCHAR* FWUCharacterAssetPaths::BackpedalAnimation(EWUCharacterSex Sex, float Right)
 {
 	if (Sex == EWUCharacterSex::Female)

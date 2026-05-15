@@ -66,18 +66,34 @@ private:
 	FReply HandleRefreshClicked();
 	FReply HandleSelectClicked(FString CharacterId);
 	FReply HandleDeleteClicked(FString CharacterId, FString CharacterName);
+	FReply HandleDeleteSelectedClicked();
+	FReply HandleChangeRealmClicked();
 	FReply HandleEnterGameClicked();
 	FText GetStatusText() const;
+	FText GetSelectedRealmText() const;
+	FText GetSelectedCharacterNameText() const;
+	FText GetSelectedCharacterDetailText() const;
+	FText GetSelectedCharacterLocationText() const;
+	EVisibility GetSelectPanelVisibility() const;
+	EVisibility GetCreatorModeVisibility() const;
 
 	TSharedRef<SWidget> CreateCharacterCreatorPanel();
-	TSharedRef<SWidget> CreateCharacterPreviewPanel();
+	TSharedRef<SWidget> CreateCharacterListPanel();
+	TSharedRef<SWidget> CreateCreationContextPanel();
+	TSharedRef<SWidget> CreateBottomCommandBar();
+	TSharedRef<SWidget> CreateActionButton(const FText& Text, FReply(UWUCharacterSelectWidget::*Handler)());
 	void RefreshCharacterRows();
 	TSharedRef<SWidget> CreateCharacterRow(const FWUBackendCharacterSummary& Character);
 	void PreviewSelectedCharacter();
 	void PreviewCharacter(const FWUBackendCharacterSummary& Character);
 	bool ShouldShowCharacterPreview() const;
+	const FWUBackendCharacterSummary* GetSelectedCharacter() const;
 	UTexture* ResolvePreviewTexture() const;
 	UTexture2D* ResolveBackgroundTexture();
+	FText GetRaceDisplayText(EWUCharacterRace Race) const;
+	FText GetRaceDescriptionText(EWUCharacterRace Race) const;
+	FText GetPathDisplayText(FName PathId) const;
+	FText GetPathDescriptionText(FName PathId) const;
 
 private:
 	FSlateBrush BackgroundBrush;

@@ -2,9 +2,12 @@
 
 #include "WULoginPlayerController.h"
 #include "CharacterCreation/WUCharacterCreatorPreviewActor.h"
+#include "CharacterCreation/WUCharacterCreatorStage.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/SceneCapture2D.h"
+#include "Engine/Scene.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "UI/WUCharacterSelectWidget.h"
 #include "UI/WULoginScreenWidget.h"
@@ -61,7 +64,9 @@ void AWULoginPlayerController::PreviewCharacterCreateRequest(const FWUCharacterC
 
 	if (AWUCharacterCreatorPreviewActor* PreviewActor = EnsureCharacterCreatorPreviewActor())
 	{
+		ApplyCharacterCreatorStage(Request.Race);
 		PreviewActor->ApplyCreateRequest(Request);
+		PreviewActor->PrestreamTextures(CharacterCreatorPreviewTextureStreamSeconds, true);
 		PreviewActor->SetActorHiddenInGame(false);
 		PositionCharacterCreatorPreviewCapture();
 
@@ -204,9 +209,12 @@ void AWULoginPlayerController::SetupCharacterCreatorPreviewRig()
 
 	if (!CharacterCreatorPreviewRenderTarget)
 	{
+		const int32 RenderTargetWidth = FMath::Max(CharacterCreatorPreviewRenderTargetSize.X, 128);
+		const int32 RenderTargetHeight = FMath::Max(CharacterCreatorPreviewRenderTargetSize.Y, 128);
+
 		CharacterCreatorPreviewRenderTarget = NewObject<UTextureRenderTarget2D>(this, TEXT("CharacterCreatorPreviewRenderTarget"));
 		CharacterCreatorPreviewRenderTarget->ClearColor = FLinearColor(0.015f, 0.012f, 0.01f, 1.0f);
-		CharacterCreatorPreviewRenderTarget->InitAutoFormat(768, 1024);
+		CharacterCreatorPreviewRenderTarget->InitAutoFormat(RenderTargetWidth, RenderTargetHeight);
 		CharacterCreatorPreviewRenderTarget->UpdateResourceImmediate(true);
 	}
 
@@ -228,14 +236,22 @@ void AWULoginPlayerController::SetupCharacterCreatorPreviewRig()
 		USceneCaptureComponent2D* CaptureComponent = CharacterCreatorSceneCaptureActor->GetCaptureComponent2D();
 		CaptureComponent->TextureTarget = CharacterCreatorPreviewRenderTarget;
 		CaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
-		CaptureComponent->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+		CaptureComponent->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_RenderScenePrimitives;
 		CaptureComponent->bCaptureEveryFrame = true;
 		CaptureComponent->bCaptureOnMovement = true;
-		CaptureComponent->FOVAngle = 30.0f;
-		CaptureComponent->ShowFlags.SetLighting(false);
-		CaptureComponent->ShowFlags.SetFog(false);
-		CaptureComponent->ShowFlags.SetAtmosphere(false);
-		CaptureComponent->ShowFlags.SetPostProcessing(false);
+		CaptureComponent->bAlwaysPersistRenderingState = true;
+		CaptureComponent->LODDistanceFactor = 0.5f;
+		CaptureComponent->FOVAngle = 42.0f;
+		CaptureComponent->PostProcessBlendWeight = 1.0f;
+		CaptureComponent->PostProcessSettings.bOverride_Sharpen = true;
+		CaptureComponent->PostProcessSettings.Sharpen = CharacterCreatorPreviewSharpen;
+		CaptureComponent->ShowFlags.SetAntiAliasing(true);
+		CaptureComponent->ShowFlags.SetTemporalAA(true);
+		CaptureComponent->ShowFlags.SetScreenPercentage(true);
+		CaptureComponent->ShowFlags.SetLighting(true);
+		CaptureComponent->ShowFlags.SetFog(true);
+		CaptureComponent->ShowFlags.SetAtmosphere(true);
+		CaptureComponent->ShowFlags.SetPostProcessing(true);
 		PositionCharacterCreatorPreviewCapture();
 	}
 }
@@ -253,18 +269,60 @@ AWUCharacterCreatorPreviewActor* AWULoginPlayerController::EnsureCharacterCreato
 
 	CharacterCreatorPreviewActor = GetWorld()->SpawnActor<AWUCharacterCreatorPreviewActor>(
 		CharacterCreatorPreviewActorClass,
-		FVector(100000.0f, 100000.0f, 100.0f),
-		FRotator(0.0f, 180.0f, 0.0f),
+		ResolveCharacterCreatorSpawnTransform(ActiveCharacterCreatorPreviewRace),
 		SpawnParameters);
 
 	if (CharacterCreatorPreviewActor && CharacterCreatorSceneCaptureActor)
 	{
 		USceneCaptureComponent2D* CaptureComponent = CharacterCreatorSceneCaptureActor->GetCaptureComponent2D();
 		CaptureComponent->ShowOnlyActors.Reset();
-		CaptureComponent->ShowOnlyActorComponents(CharacterCreatorPreviewActor);
 	}
 
 	return CharacterCreatorPreviewActor;
+}
+
+const AWUCharacterCreatorStage* AWULoginPlayerController::FindCharacterCreatorStage(EWUCharacterRace Race) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AWUCharacterCreatorStage> It(World); It; ++It)
+	{
+		const AWUCharacterCreatorStage* Stage = *It;
+		if (Stage && Stage->BloodStatus == Race)
+		{
+			return Stage;
+		}
+	}
+
+	return nullptr;
+}
+
+FTransform AWULoginPlayerController::ResolveCharacterCreatorSpawnTransform(EWUCharacterRace Race) const
+{
+	if (const AWUCharacterCreatorStage* Stage = FindCharacterCreatorStage(Race))
+	{
+		return Stage->GetCharacterSpawnTransform();
+	}
+
+	return FTransform(CharacterCreatorPreviewStageRotation, CharacterCreatorPreviewStageLocation);
+}
+
+void AWULoginPlayerController::ApplyCharacterCreatorStage(EWUCharacterRace Race, bool bForce)
+{
+	const bool bStageChanged = !bHasActiveCharacterCreatorPreviewRace || ActiveCharacterCreatorPreviewRace != Race;
+	ActiveCharacterCreatorPreviewRace = Race;
+	bHasActiveCharacterCreatorPreviewRace = true;
+
+	if (!CharacterCreatorPreviewActor || (!bForce && !bStageChanged))
+	{
+		return;
+	}
+
+	CharacterCreatorPreviewActor->SetActorTransform(ResolveCharacterCreatorSpawnTransform(Race));
 }
 
 void AWULoginPlayerController::PositionCharacterCreatorPreviewCapture()
@@ -274,9 +332,22 @@ void AWULoginPlayerController::PositionCharacterCreatorPreviewCapture()
 		return;
 	}
 
-	const FVector PreviewLocation = FVector(100000.0f, 100000.0f, 100.0f);
-	const FVector CameraLocation = PreviewLocation + FVector(230.0f, -470.0f, 145.0f);
-	const FVector LookAtLocation = PreviewLocation + FVector(0.0f, 0.0f, 92.0f);
+	FVector CameraLocation;
+	FVector LookAtLocation;
+
+	if (const AWUCharacterCreatorStage* Stage = FindCharacterCreatorStage(ActiveCharacterCreatorPreviewRace))
+	{
+		CameraLocation = Stage->GetCameraLocation();
+		LookAtLocation = Stage->GetLookAtLocation();
+	}
+	else
+	{
+		const FVector PreviewLocation = CharacterCreatorPreviewActor
+			? CharacterCreatorPreviewActor->GetActorLocation()
+			: CharacterCreatorPreviewStageLocation;
+		CameraLocation = PreviewLocation + CharacterCreatorPreviewCameraOffset;
+		LookAtLocation = PreviewLocation + CharacterCreatorPreviewLookAtOffset;
+	}
 
 	CharacterCreatorSceneCaptureActor->SetActorLocation(CameraLocation);
 	CharacterCreatorSceneCaptureActor->SetActorRotation((LookAtLocation - CameraLocation).Rotation());

@@ -5,6 +5,7 @@ using WU.Application.Clubs;
 using WU.Application.Currency;
 using WU.Application.Inventory;
 using WU.Application.Vendors;
+using WU.Application.World;
 using WU.Domain.Characters;
 using WU.Infrastructure.Auth;
 using WU.Infrastructure.Characters;
@@ -42,6 +43,7 @@ builder.Services.AddScoped<CurrencyService>();
 builder.Services.AddScoped<ICharacterInventoryRepository, PostgresCharacterInventoryRepository>();
 builder.Services.AddScoped<CharacterInventoryService>();
 builder.Services.AddScoped<VendorService>();
+builder.Services.AddSingleton<WorldTimeService>();
 builder.Services.AddScoped<IAuthRepository, PostgresAuthRepository>();
 builder.Services.AddScoped<AuthSessionTokenService>();
 builder.Services.AddScoped<AuthService>();
@@ -74,6 +76,11 @@ app.MapGet("/health/ready", (IConfiguration configuration) =>
 app.MapGet("/api/backend/manifest", (BackendManifestService manifestService) =>
 {
     return Results.Ok(manifestService.GetManifest());
+});
+
+app.MapGet("/api/world/time", (WorldTimeService worldTimeService) =>
+{
+    return Results.Ok(worldTimeService.GetCurrent());
 });
 
 app.MapPost("/api/auth/dev-login", async (AuthService service, CancellationToken cancellationToken) =>

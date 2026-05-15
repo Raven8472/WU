@@ -21,6 +21,7 @@ namespace
 {
 	const FLinearColor LoginPanelTint(0.015f, 0.012f, 0.01f, 0.78f);
 	const FLinearColor LoginGoldText(0.96f, 0.84f, 0.58f, 1.0f);
+	const FLinearColor LoginMutedText(0.82f, 0.78f, 0.68f, 0.9f);
 }
 
 UWULoginScreenWidget::UWULoginScreenWidget(const FObjectInitializer& ObjectInitializer)
@@ -85,11 +86,11 @@ TSharedRef<SWidget> UWULoginScreenWidget::RebuildWidget()
 		.Padding(FMargin(0.0f, 0.0f, 110.0f, 0.0f))
 		[
 			SNew(SBox)
-			.WidthOverride(420.0f)
+			.WidthOverride(470.0f)
 			[
 				SNew(SBorder)
 				.BorderImage(&PanelBrush)
-				.Padding(FMargin(28.0f, 24.0f))
+				.Padding(FMargin(30.0f, 26.0f))
 				[
 					SNew(SVerticalBox)
 
@@ -106,25 +107,57 @@ TSharedRef<SWidget> UWULoginScreenWidget::RebuildWidget()
 
 					+ SVerticalBox::Slot()
 					.AutoHeight()
-					.Padding(FMargin(0.0f, 4.0f, 0.0f, 26.0f))
+					.Padding(FMargin(0.0f, 4.0f, 0.0f, 20.0f))
 					[
 						SNew(STextBlock)
-						.Text(LOCTEXT("LoginSubtitle", "Persistence prototype"))
+						.Text(LOCTEXT("LoginSubtitle", "Local development realm"))
 						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
-						.ColorAndOpacity(FLinearColor(0.92f, 0.9f, 0.84f, 0.88f))
+						.ColorAndOpacity(LoginMutedText)
+					]
+
+					+ SVerticalBox::Slot()
+					.AutoHeight()
+					.Padding(FMargin(0.0f, 0.0f, 0.0f, 20.0f))
+					[
+						SNew(SBorder)
+						.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+						.BorderBackgroundColor(FLinearColor(0.02f, 0.018f, 0.014f, 0.58f))
+						.Padding(FMargin(14.0f, 11.0f))
+						[
+							SNew(SVerticalBox)
+
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							[
+								SNew(STextBlock)
+								.Text(LOCTEXT("ServerLabel", "Server"))
+								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 13))
+								.ColorAndOpacity(LoginGoldText)
+							]
+
+							+ SVerticalBox::Slot()
+							.AutoHeight()
+							.Padding(FMargin(0.0f, 3.0f, 0.0f, 0.0f))
+							[
+								SNew(STextBlock)
+								.Text(LOCTEXT("ServerName", "Development Realm"))
+								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 18))
+								.ColorAndOpacity(FLinearColor(1.0f, 0.96f, 0.9f, 1.0f))
+							]
+						]
 					]
 
 					+ SVerticalBox::Slot()
 					.AutoHeight()
 					[
 						SNew(SButton)
-						.ContentPadding(FMargin(18.0f, 11.0f))
+						.ContentPadding(FMargin(18.0f, 12.0f))
 						.OnClicked_UObject(this, &UWULoginScreenWidget::HandleDevLoginClicked)
 						[
 							SNew(STextBlock)
 							.Text(LOCTEXT("DevLogin", "Dev Login"))
 							.Justification(ETextJustify::Center)
-							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 17))
+							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 18))
 						]
 					]
 
@@ -135,7 +168,7 @@ TSharedRef<SWidget> UWULoginScreenWidget::RebuildWidget()
 						SNew(STextBlock)
 						.Text_UObject(this, &UWULoginScreenWidget::GetStatusText)
 						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
-						.ColorAndOpacity(FLinearColor(0.9f, 0.86f, 0.76f, 0.88f))
+						.ColorAndOpacity(LoginMutedText)
 						.AutoWrapText(true)
 					]
 				]

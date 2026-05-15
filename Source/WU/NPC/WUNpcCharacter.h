@@ -8,14 +8,11 @@
 #include "NPC/WUNpcTypes.h"
 #include "WUNpcCharacter.generated.h"
 
-class UAnimationAsset;
-class UMaterialInterface;
-class USkeletalMesh;
 class USkeletalMeshComponent;
-class UTexture2D;
 class UWidgetComponent;
 class UWUNpcDefinition;
 class UWUOverheadNameWidget;
+class UWUOverheadNameVisibilityComponent;
 
 UCLASS(Blueprintable)
 class WU_API AWUNpcCharacter : public ACharacter
@@ -107,6 +104,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|UI")
 	TObjectPtr<UWidgetComponent> OverheadNameComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|UI")
+	TObjectPtr<UWUOverheadNameVisibilityComponent> OverheadNameVisibilityComponent;
+
 private:
 
 	void UpdateNpcAppearance();
@@ -114,11 +114,4 @@ private:
 	UWUOverheadNameWidget* GetOverheadNameWidget() const;
 	void ConfigureBodyMeshComponent() const;
 	void ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const;
-	void SetModularMesh(USkeletalMeshComponent* MeshComponent, const TCHAR* AssetPath) const;
-	void ShowModularMesh(USkeletalMeshComponent* MeshComponent) const;
-	void HideModularMesh(USkeletalMeshComponent* MeshComponent) const;
-	USkeletalMesh* LoadSkeletalMeshForPath(const TCHAR* AssetPath) const;
-	UMaterialInterface* LoadMaterialForPath(const TCHAR* AssetPath) const;
-	UTexture2D* LoadTextureForPath(const TCHAR* AssetPath) const;
-	UClass* LoadAnimClassForPath(const TCHAR* AssetPath) const;
 };

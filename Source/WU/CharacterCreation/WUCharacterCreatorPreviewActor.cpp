@@ -1,12 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "CharacterCreation/WUCharacterCreatorPreviewActor.h"
+#include "CharacterCreation/WUCharacterAppearanceApplier.h"
 #include "CharacterCreation/WUCharacterAssetPaths.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Engine/SkeletalMesh.h"
-#include "Engine/Texture2D.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Materials/MaterialInterface.h"
 
 AWUCharacterCreatorPreviewActor::AWUCharacterCreatorPreviewActor()
 {
@@ -20,6 +17,7 @@ AWUCharacterCreatorPreviewActor::AWUCharacterCreatorPreviewActor()
 	BodyMeshComponent->SetupAttachment(SceneRoot);
 	BodyMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	BodyMeshComponent->SetGenerateOverlapEvents(false);
+	BodyMeshComponent->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
 	HeadMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("HeadMesh"));
 	HeadMeshComponent->SetupAttachment(BodyMeshComponent);
@@ -68,238 +66,25 @@ AWUCharacterCreatorPreviewActor::AWUCharacterCreatorPreviewActor()
 
 void AWUCharacterCreatorPreviewActor::ApplyCreateRequest(const FWUCharacterCreateRequest& Request)
 {
-	if (USkeletalMesh* BodyMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BodyMesh(Request.Sex)))
-	{
-		BodyMeshComponent->SetSkeletalMesh(BodyMesh);
-	}
+	FWUCharacterAppearanceMeshSet Meshes;
+	Meshes.BodyMesh = BodyMeshComponent;
+	Meshes.HeadMesh = HeadMeshComponent;
+	Meshes.HairMesh = HairMeshComponent;
+	Meshes.BrowsMesh = BrowsMeshComponent;
+	Meshes.BeardMesh = BeardMeshComponent;
+	Meshes.PantsMesh = PantsMeshComponent;
+	Meshes.HandsMesh = HandsMeshComponent;
+	Meshes.BracersMesh = BracersMeshComponent;
+	Meshes.ChestOutfitMesh = ChestOutfitMeshComponent;
+	Meshes.ChestAddOutfitMesh = ChestAddOutfitMeshComponent;
+	Meshes.BeltOutfitMesh = BeltOutfitMeshComponent;
+	Meshes.BootsOutfitMesh = BootsOutfitMeshComponent;
 
-	BodyMeshComponent->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
-	BodyMeshComponent->SetVisibility(false, false);
-	BodyMeshComponent->SetHiddenInGame(true, false);
-
-	const auto ShowModularMesh = [](USkeletalMeshComponent* MeshComponent)
-	{
-		if (!MeshComponent)
-		{
-			return;
-		}
-
-		MeshComponent->SetVisibility(true, false);
-		MeshComponent->SetHiddenInGame(false, false);
-	};
-
-	const auto HideModularMesh = [](USkeletalMeshComponent* MeshComponent)
-	{
-		if (!MeshComponent)
-		{
-			return;
-		}
-
-		MeshComponent->SetVisibility(false, false);
-		MeshComponent->SetHiddenInGame(true, false);
-	};
-
-	if (USkeletalMesh* HeadMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::HeadMesh(Request.Sex)))
-	{
-		HeadMeshComponent->SetSkeletalMesh(HeadMesh);
-		HeadMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(HeadMeshComponent);
-	}
-
-	if (USkeletalMesh* HairMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::HairMesh(Request.Sex, Request.HairStyleIndex)))
-	{
-		HairMeshComponent->SetSkeletalMesh(HairMesh);
-		HairMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(HairMeshComponent);
-	}
-	else
-	{
-		HideModularMesh(HairMeshComponent);
-	}
-
-	if (USkeletalMesh* BrowsMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BrowsMesh(Request.Sex, Request.BrowStyleIndex)))
-	{
-		BrowsMeshComponent->SetSkeletalMesh(BrowsMesh);
-		BrowsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(BrowsMeshComponent);
-	}
-	else
-	{
-		HideModularMesh(BrowsMeshComponent);
-	}
-
-	if (USkeletalMesh* BeardMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BeardMesh(Request.Sex, Request.BeardStyleIndex)))
-	{
-		BeardMeshComponent->SetSkeletalMesh(BeardMesh);
-		BeardMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(BeardMeshComponent);
-	}
-	else
-	{
-		HideModularMesh(BeardMeshComponent);
-	}
-
-	if (USkeletalMesh* PantsMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::PantsMesh(Request.Sex)))
-	{
-		PantsMeshComponent->SetSkeletalMesh(PantsMesh);
-		PantsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(PantsMeshComponent);
-	}
-
-	if (USkeletalMesh* HandsMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::HandsMesh(Request.Sex)))
-	{
-		HandsMeshComponent->SetSkeletalMesh(HandsMesh);
-		HandsMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(HandsMeshComponent);
-	}
-
-	if (USkeletalMesh* BracersMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::BracersMesh(Request.Sex)))
-	{
-		BracersMeshComponent->SetSkeletalMesh(BracersMesh);
-		BracersMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(BracersMeshComponent);
-	}
-
-	if (USkeletalMesh* ChestOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterChestOutfitMesh(Request.Sex)))
-	{
-		ChestOutfitMeshComponent->SetSkeletalMesh(ChestOutfitMesh);
-		ChestOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(ChestOutfitMeshComponent);
-	}
-
-	if (USkeletalMesh* ChestAddOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterChestAddOutfitMesh(Request.Sex)))
-	{
-		ChestAddOutfitMeshComponent->SetSkeletalMesh(ChestAddOutfitMesh);
-		ChestAddOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(ChestAddOutfitMeshComponent);
-	}
-
-	if (USkeletalMesh* BeltOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterBeltOutfitMesh(Request.Sex)))
-	{
-		BeltOutfitMeshComponent->SetSkeletalMesh(BeltOutfitMesh);
-		BeltOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(BeltOutfitMeshComponent);
-	}
-
-	if (USkeletalMesh* BootsOutfitMesh = LoadSkeletalMeshForPath(FWUCharacterAssetPaths::StarterBootsOutfitMesh(Request.Sex)))
-	{
-		BootsOutfitMeshComponent->SetSkeletalMesh(BootsOutfitMesh);
-		BootsOutfitMeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-		ShowModularMesh(BootsOutfitMeshComponent);
-	}
-
-	if (UMaterialInterface* BodyMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::BodyMaterial(Request.Sex, Request.SkinPresetIndex)))
-	{
-		const int32 MaterialCount = BodyMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
-		{
-			BodyMeshComponent->SetMaterial(MaterialIndex, BodyMaterial);
-		}
-
-		const int32 HandsMaterialCount = HandsMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < HandsMaterialCount; ++MaterialIndex)
-		{
-			HandsMeshComponent->SetMaterial(MaterialIndex, BodyMaterial);
-		}
-
-		const int32 BracersMaterialCount = BracersMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < BracersMaterialCount; ++MaterialIndex)
-		{
-			BracersMeshComponent->SetMaterial(MaterialIndex, BodyMaterial);
-		}
-
-		const int32 ChestBodyMaterialIndex = ChestOutfitMeshComponent->GetMaterialIndex(TEXT("M_Body"));
-		if (ChestBodyMaterialIndex != INDEX_NONE)
-		{
-			ChestOutfitMeshComponent->SetMaterial(ChestBodyMaterialIndex, BodyMaterial);
-		}
-	}
-
-	if (UMaterialInterface* HeadMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::HeadMaterial(Request.Sex, Request.HeadPresetIndex)))
-	{
-		UMaterialInterface* ResolvedHeadMaterial = HeadMaterial;
-		if (UTexture2D* UnderhairTexture = LoadTextureForPath(FWUCharacterAssetPaths::UnderhairTexture(Request.Sex, Request.HairColorIndex)))
-		{
-			UMaterialInstanceDynamic* DynamicHeadMaterial = UMaterialInstanceDynamic::Create(HeadMaterial, this);
-			DynamicHeadMaterial->SetTextureParameterValue(TEXT("Underhair_D"), UnderhairTexture);
-			ResolvedHeadMaterial = DynamicHeadMaterial;
-		}
-
-		bool bAppliedHeadMaterial = false;
-		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
-		{
-			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
-			if (!SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase)
-				&& !SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase)
-				&& (SlotName.Contains(TEXT("Head"), ESearchCase::IgnoreCase)
-					|| SlotName.Contains(TEXT("Face"), ESearchCase::IgnoreCase)
-					|| SlotName.Contains(TEXT("Skin"), ESearchCase::IgnoreCase)))
-			{
-				HeadMeshComponent->SetMaterial(MaterialIndex, ResolvedHeadMaterial);
-				bAppliedHeadMaterial = true;
-			}
-		}
-
-		if (!bAppliedHeadMaterial && HeadMeshComponent->GetNumMaterials() > 0)
-		{
-			HeadMeshComponent->SetMaterial(0, ResolvedHeadMaterial);
-		}
-	}
-
-	if (UMaterialInterface* FacialsMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::FacialsMaterial(Request.Sex, Request.HairColorIndex)))
-	{
-		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
-		{
-			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
-			if (SlotName.Contains(TEXT("Facial"), ESearchCase::IgnoreCase))
-			{
-				HeadMeshComponent->SetMaterial(MaterialIndex, FacialsMaterial);
-			}
-		}
-	}
-
-	if (UMaterialInterface* EyeMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::EyeMaterial(Request.EyeColorIndex)))
-	{
-		bool bAppliedEyeMaterial = false;
-		const TArray<FName> MaterialSlotNames = HeadMeshComponent->GetMaterialSlotNames();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialSlotNames.Num(); ++MaterialIndex)
-		{
-			const FString SlotName = MaterialSlotNames[MaterialIndex].ToString();
-			if (SlotName.Contains(TEXT("Eye"), ESearchCase::IgnoreCase))
-			{
-				HeadMeshComponent->SetMaterial(MaterialIndex, EyeMaterial);
-				bAppliedEyeMaterial = true;
-			}
-		}
-
-		if (!bAppliedEyeMaterial && HeadMeshComponent->GetNumMaterials() > 1)
-		{
-			HeadMeshComponent->SetMaterial(1, EyeMaterial);
-		}
-	}
-
-	if (UMaterialInterface* HairMaterial = LoadMaterialForPath(FWUCharacterAssetPaths::HairMaterial(Request.HairColorIndex)))
-	{
-		const int32 MaterialCount = HairMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
-		{
-			HairMeshComponent->SetMaterial(MaterialIndex, HairMaterial);
-		}
-
-		const int32 BrowsMaterialCount = BrowsMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < BrowsMaterialCount; ++MaterialIndex)
-		{
-			BrowsMeshComponent->SetMaterial(MaterialIndex, HairMaterial);
-		}
-
-		const int32 BeardMaterialCount = BeardMeshComponent->GetNumMaterials();
-		for (int32 MaterialIndex = 0; MaterialIndex < BeardMaterialCount; ++MaterialIndex)
-		{
-			BeardMeshComponent->SetMaterial(MaterialIndex, HairMaterial);
-		}
-	}
+	FWUCharacterAppearanceApplyOptions Options;
+	Options.MaterialOuter = this;
+	Options.bApplyAnimationBlueprint = false;
+	WUCharacterAppearance::ApplyAppearance(WUCharacterAppearance::FromCreateRequest(Request), Meshes, Options);
+	PlayIdleAnimation(Request.Sex);
 }
 
 void AWUCharacterCreatorPreviewActor::RotatePreview(float YawDelta)
@@ -309,42 +94,19 @@ void AWUCharacterCreatorPreviewActor::RotatePreview(float YawDelta)
 
 void AWUCharacterCreatorPreviewActor::ConfigureModularMeshComponent(USkeletalMeshComponent* MeshComponent) const
 {
-	if (!MeshComponent)
+	WUCharacterAppearance::ConfigureModularMeshComponent(MeshComponent, BodyMeshComponent);
+}
+
+void AWUCharacterCreatorPreviewActor::PlayIdleAnimation(EWUCharacterSex Sex) const
+{
+	if (!BodyMeshComponent)
 	{
 		return;
 	}
 
-	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	MeshComponent->SetGenerateOverlapEvents(false);
-	MeshComponent->SetLeaderPoseComponent(BodyMeshComponent);
-}
-
-USkeletalMesh* AWUCharacterCreatorPreviewActor::LoadSkeletalMeshForPath(const TCHAR* AssetPath) const
-{
-	if (!AssetPath)
+	if (UAnimationAsset* IdleAnimation = WUCharacterAppearance::LoadAnimationAssetForPath(FWUCharacterAssetPaths::IdleAnimation(Sex)))
 	{
-		return nullptr;
+		BodyMeshComponent->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		BodyMeshComponent->PlayAnimation(IdleAnimation, true);
 	}
-
-	return LoadObject<USkeletalMesh>(nullptr, AssetPath);
-}
-
-UMaterialInterface* AWUCharacterCreatorPreviewActor::LoadMaterialForPath(const TCHAR* AssetPath) const
-{
-	if (!AssetPath)
-	{
-		return nullptr;
-	}
-
-	return LoadObject<UMaterialInterface>(nullptr, AssetPath);
-}
-
-UTexture2D* AWUCharacterCreatorPreviewActor::LoadTextureForPath(const TCHAR* AssetPath) const
-{
-	if (!AssetPath)
-	{
-		return nullptr;
-	}
-
-	return LoadObject<UTexture2D>(nullptr, AssetPath);
 }

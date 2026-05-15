@@ -48,10 +48,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Character Creation")
 	FWUCharacterCreateRequest GetCurrentRequest() const;
 
+	UFUNCTION(BlueprintPure, Category = "Character Creation")
+	FName GetSelectedPathId() const;
+
 protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance")
-	FVector2D CreatorSize = FVector2D(430.0f, 690.0f);
+	FVector2D CreatorSize = FVector2D(440.0f, 780.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Appearance|Textures")
 	TObjectPtr<UTexture2D> PanelTexture;
@@ -73,6 +76,7 @@ private:
 	void RefreshPreview() const;
 	void SetRace(EWUCharacterRace NewRace);
 	void SetSex(EWUCharacterSex NewSex);
+	void SetPath(FName NewPathId);
 	void CycleSkinPreset(int32 Delta);
 	void CycleHairStyle(int32 Delta);
 	void CycleHairColor(int32 Delta);
@@ -88,6 +92,7 @@ private:
 	TSharedRef<SWidget> CreateHeaderText(const FText& Text) const;
 	TSharedRef<SWidget> CreateValueText(TAttribute<FText> Text) const;
 	TSharedRef<SWidget> CreateButton(const FText& Text, TFunction<FReply()> Handler) const;
+	TSharedRef<SWidget> CreateChoiceButton(const FText& Text, TFunction<bool()> IsSelected, TFunction<FReply()> Handler) const;
 	TSharedRef<SWidget> CreateStepperRow(const FText& Label, TAttribute<FText> ValueText, TFunction<void()> PreviousHandler, TFunction<void()> NextHandler) const;
 
 	void ConfigureImageBrush(FSlateBrush& Brush, UTexture2D* Texture, const FVector2D& ImageSize, const FMargin& Margin = FMargin(0.0f));
@@ -96,6 +101,7 @@ private:
 
 	bool bCreatorOpen = false;
 	FWUCharacterCreateRequest CurrentRequest;
+	FName SelectedPathId = FName(TEXT("Auror"));
 
 	TSharedPtr<SEditableTextBox> NameInputBox;
 	FSlateBrush PanelBrush;
